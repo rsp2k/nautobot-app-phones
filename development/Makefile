@@ -59,8 +59,14 @@ nbshell:
 migrate:
 	$(DC) exec $(WEB) nautobot-server migrate
 
+HOST_UID := $(shell id -u)
+HOST_GID := $(shell id -g)
+
 makemigrations:
-	$(DC) exec $(WEB) nautobot-server makemigrations nautobot_phones
+	# Run as root inside the container so writes through the bind mount
+	# succeed, then chown the result back to the host UID. Bypasses the
+	# nautobot user (UID 999) vs host user (UID 1000) bind-mount mismatch.
+	$(DC) exec --user 0 $(WEB) bash -c "nautobot-server makemigrations nautobot_phones && chown -R $(HOST_UID):$(HOST_GID) /opt/plugin/src/nautobot_phones"
 
 test:
 	$(DC) exec $(WEB) nautobot-server test nautobot_phones --keepdb
