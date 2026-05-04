@@ -1,0 +1,145 @@
+# Dev stack for nautobot-app-phones.
+#
+# 4 containers: postgres + redis + nautobot-web + nautobot-worker.
+# Reverse-proxied via caddy-docker-proxy on the external `caddy` network.
+# Plugin source bind-mounted from ../src for hot-reload (restart web to apply).
+
+x-nautobot-common: &nautobot-common
+  build:
+    context: ..
+    dockerfile: development/Dockerfile
+  image: nautobot-app-phones-dev:latest
+  restart: unless-stopped
+  environment:
+    NAUTOBOT_ALLOWED_HOSTS: "${DOMAIN} nautobot-web localhost 127.0.0.1"
+    NAUTOBOT_DB_HOST: postgres
+    NAUTOBOT_DB_PORT: "5432"
+    NAUTOBOT_DB_NAME: ${NAUTOBOT_DB_NAME}
+    NAUTOBOT_DB_USER: ${NAUTOBOT_DB_USER}
+    NAUTOBOT_DB_PASSWORD: ${NAUTOBOT_DB_PASSWORD}
+    NAUTOBOT_REDIS_HOST: redis
+    NAUTOBOT_REDIS_PORT: "6379"
+    NAUTOBOT_REDIS_PASSWORD: ${NAUTOBOT_REDIS_PASSWORD}
+    NAUTOBOT_SECRET_KEY: ${NAUTOBOT_SECRET_KEY}
+    NAUTOBOT_SUPERUSER_NAME: ${NAUTOBOT_SUPERUSER_NAME}
+    NAUTOBOT_SUPERUSER_EMAIL: ${NAUTOBOT_SUPERUSER_EMAIL}
+    NAUTOBOT_SUPERUSER_PASSWORD: ${NAUTOBOT_SUPERUSER_PASSWORD}
+    NAUTOBOT_SUPERUSER_API_TOKEN: ${NAUTOBOT_SUPERUSER_API_TOKEN}
+    NAUTOBOT_CREATE_SUPERUSER: "true"
+    # Phone-system credential placeholders — wired in Phase 4/5 via SecretsGroup.
+    # Keeping them here so they're documented and grep-able.
+    CCM_LAB_HOST: ${CCM_LAB_HOST:-}
+    CCM_LAB_USER: ${CCM_LAB_USER:-}
+    CCM_LAB_PASSWORD: ${CCM_LAB_PASSWORD:-}
+    FREEPBX_LAB_HOST: ${FREEPBX_LAB_HOST:-}
+    FREEPBX_LAB_TOKEN: ${FREEPBX_LAB_TOKEN:-}
+    PYTHONUNBUFFERED: "1"
+  volumes:
+    # Custom config (PLUGINS list, PLUGINS_CONFIG, debug toggles).
+    - ./nautobot_config/nautobot_config.py:/opt/nautobot/nautobot_config.py:ro
+    # Hot-reload our plugin source.
+    - ../src:/opt/plugin/src
+    # Persistent state.
+    - nautobot-static:/opt/nautobot/static
+    - nautobot-media:/opt/nautobot/media
+    - nautobot-git-repos:/opt/nautobot/git
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    nautobot-init:
+      condition: service_completed_successfully
+
+services:
+  # One-shot: chown the named volumes to UID 999 (nautobot) before the app
+  # containers start. Docker creates named-volume root dirs as root:root,
+  # which the non-root nautobot user can't write to. Idempotent — safe to
+  # re-run on every `up`.
+  nautobot-init:
+    image: nautobot-app-phones-dev:latest
+    container_name: ${COMPOSE_PROJECT}-init
+    user: "0"
+    restart: "no"
+    # Override entrypoint to bypass the upstream docker-entrypoint.sh — that
+    # script tries to wait on the DB/redis, which requires env vars we don't
+    # pass to this one-shot. We just want to chown the volumes and exit.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 999:999 /opt/nautobot/media /opt/nautobot/static /opt/nautobot/git && echo 'volumes chowned'"]
+    volumes:
+      - nautobot-static:/opt/nautobot/static
+      - nautobot-media:/opt/nautobot/media
+      - nautobot-git-repos:/opt/nautobot/git
+    networks:
+      - internal
+    depends_on:
+      - postgres
+      - redis
+
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${NAUTOBOT_DB_NAME}
+      POSTGRES_USER: ${NAUTOBOT_DB_USER}
+      POSTGRES_PASSWORD: ${NAUTOBOT_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT}-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${NAUTOBOT_REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${NAUTOBOT_REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  nautobot-web:
+    <<: *nautobot-common
+    container_name: ${COMPOSE_PROJECT}-web
+    networks:
+      - internal
+      - caddy
+    labels:
+      caddy: ${DOMAIN}
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy.encode: "gzip zstd"
+
+  nautobot-worker:
+    <<: *nautobot-common
+    container_name: ${COMPOSE_PROJECT}-worker
+    # `command:` (not `entrypoint:`) so the upstream Nautobot
+    # docker-entrypoint.sh still runs first — it creates media/static dirs
+    # with correct permissions before exec'ing whatever's passed here.
+    command: ["nautobot-server", "celery", "worker", "-l", "INFO"]
+    networks:
+      - internal
+
+volumes:
+  postgres-data:
+  redis-data:
+  nautobot-static:
+  nautobot-media:
+  nautobot-git-repos:
+
+networks:
+  internal:
+    driver: bridge
+  caddy:
+    external: true
