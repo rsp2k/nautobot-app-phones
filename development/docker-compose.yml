@@ -4,6 +4,11 @@
 # Reverse-proxied via caddy-docker-proxy on the external `caddy` network.
 # Plugin source bind-mounted from ../src for hot-reload (restart web to apply).
 
+# Pin the docker compose project name explicitly so volume + network names
+# don't fall back to the working directory ("development"), which would
+# collide with any other project run from a `development/` subdir.
+name: ${COMPOSE_PROJECT:-nautobot-phones-dev}
+
 x-nautobot-common: &nautobot-common
   build:
     context: ..
