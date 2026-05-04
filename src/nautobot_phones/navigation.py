@@ -1,8 +1,7 @@
 """Top-level Nav Menu entries for nautobot-app-phones.
 
-Adds a 'Phones' tab to the Nautobot top nav, with grouped submenu
-items per model. Discovered by Nautobot via the `menu_items` module
-attribute.
+Adds a 'Phones' tab to the Nautobot top nav, organized into logical
+groups: Systems, Endpoints, Numbers, Routing, Dial Plan.
 """
 
 from nautobot.apps.ui import NavMenuGroup, NavMenuItem, NavMenuTab
@@ -20,6 +19,80 @@ menu_items = (
                         link="plugins:nautobot_phones:phonesystem_list",
                         name="Phone Systems",
                         permissions=["nautobot_phones.view_phonesystem"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:carrier_list",
+                        name="Carriers",
+                        permissions=["nautobot_phones.view_carrier"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
+                name="Endpoints",
+                weight=200,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:phone_list",
+                        name="Phones",
+                        permissions=["nautobot_phones.view_phone"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:analoggateway_list",
+                        name="Analog Gateways",
+                        permissions=["nautobot_phones.view_analoggateway"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
+                name="Numbers",
+                weight=300,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:directorynumber_list",
+                        name="Directory Numbers",
+                        permissions=["nautobot_phones.view_directorynumber"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:didblock_list",
+                        name="DID Blocks",
+                        permissions=["nautobot_phones.view_didblock"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:did_list",
+                        name="DIDs",
+                        permissions=["nautobot_phones.view_did"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
+                name="Routing",
+                weight=400,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:trunk_list",
+                        name="Trunks",
+                        permissions=["nautobot_phones.view_trunk"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:routepattern_list",
+                        name="Route Patterns",
+                        permissions=["nautobot_phones.view_routepattern"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
+                name="Dial Plan",
+                weight=500,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:partition_list",
+                        name="Partitions",
+                        permissions=["nautobot_phones.view_partition"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:callingsearchspace_list",
+                        name="Calling Search Spaces",
+                        permissions=["nautobot_phones.view_callingsearchspace"],
                     ),
                 ),
             ),

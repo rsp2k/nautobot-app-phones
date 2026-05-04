@@ -118,6 +118,11 @@ services:
   nautobot-web:
     <<: *nautobot-common
     container_name: ${COMPOSE_PROJECT}-web
+    # Loopback-only port mapping so we can hit Nautobot directly from
+    # the host (useful for Playwright + curl testing). Caddy still
+    # reverse-proxies via the labels below for normal browser access.
+    ports:
+      - "127.0.0.1:8085:8080"
     networks:
       - internal
       - caddy

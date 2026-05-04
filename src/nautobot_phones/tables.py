@@ -1,9 +1,13 @@
 """django-tables2 Table classes for nautobot-app-phones list views.
 
-Each PrimaryModel gets a Table that defines its column layout for the
-list view. Conventions: leading ToggleColumn for bulk-action checkbox,
-linked `name` column for navigation, trailing ButtonsColumn for
-edit/delete actions.
+Each PrimaryModel/OrganizationalModel gets a Table that defines its column
+layout for the list view. Conventions: leading ToggleColumn for bulk-action
+checkbox, linked `name`/`extension`/`pattern` column for navigation,
+trailing ButtonsColumn for edit/delete actions.
+
+Junction-style records (Line, AnalogPort, CSSPartitionMembership,
+DIDAssignment) don't have standalone list pages — they render nested in
+their parent's detail view in Phase 2c.
 """
 
 import django_tables2 as tables
@@ -20,17 +24,158 @@ class PhoneSystemTable(BaseTable):
     actions = ButtonsColumn(models.PhoneSystem)
 
     class Meta(BaseTable.Meta):
-        """Table meta — selects which fields render in the list view."""
-
         model = models.PhoneSystem
-        fields = (
-            "pk",
-            "name",
-            "vendor",
-            "version",
-            "hostname",
-            "location",
-            "last_synced_at",
-            "actions",
-        )
+        fields = ("pk", "name", "vendor", "version", "hostname", "location", "last_synced_at", "actions")
         default_columns = ("pk", "name", "vendor", "version", "hostname", "actions")
+
+
+class CarrierTable(BaseTable):
+    """List-view table for Carrier."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    actions = ButtonsColumn(models.Carrier)
+
+    class Meta(BaseTable.Meta):
+        model = models.Carrier
+        fields = ("pk", "name", "account_number", "description", "actions")
+        default_columns = ("pk", "name", "account_number", "actions")
+
+
+class PartitionTable(BaseTable):
+    """List-view table for Partition."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.Partition)
+
+    class Meta(BaseTable.Meta):
+        model = models.Partition
+        fields = ("pk", "name", "phone_system", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "actions")
+
+
+class CallingSearchSpaceTable(BaseTable):
+    """List-view table for CallingSearchSpace."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.CallingSearchSpace)
+
+    class Meta(BaseTable.Meta):
+        model = models.CallingSearchSpace
+        fields = ("pk", "name", "phone_system", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "actions")
+
+
+class DirectoryNumberTable(BaseTable):
+    """List-view table for DirectoryNumber."""
+
+    pk = ToggleColumn()
+    extension = tables.LinkColumn()
+    partition = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.DirectoryNumber)
+
+    class Meta(BaseTable.Meta):
+        model = models.DirectoryNumber
+        fields = ("pk", "extension", "partition", "phone_system", "alerting_name", "voicemail_profile", "actions")
+        default_columns = ("pk", "extension", "partition", "phone_system", "alerting_name", "actions")
+
+
+class DIDBlockTable(BaseTable):
+    """List-view table for DIDBlock."""
+
+    pk = ToggleColumn()
+    start_e164 = tables.LinkColumn(verbose_name="Start")
+    end_e164 = tables.Column(verbose_name="End")
+    carrier = tables.LinkColumn()
+    location = tables.LinkColumn()
+    size = tables.Column(orderable=False)
+    actions = ButtonsColumn(models.DIDBlock)
+
+    class Meta(BaseTable.Meta):
+        model = models.DIDBlock
+        fields = ("pk", "start_e164", "end_e164", "size", "carrier", "location", "phone_system", "actions")
+        default_columns = ("pk", "start_e164", "end_e164", "size", "carrier", "location", "actions")
+
+
+class DIDTable(BaseTable):
+    """List-view table for DID."""
+
+    pk = ToggleColumn()
+    e164 = tables.LinkColumn()
+    block = tables.LinkColumn()
+    is_special = tables.BooleanColumn()
+    actions = ButtonsColumn(models.DID)
+
+    class Meta(BaseTable.Meta):
+        model = models.DID
+        fields = ("pk", "e164", "block", "is_special", "actions")
+        default_columns = ("pk", "e164", "block", "is_special", "actions")
+
+
+class PhoneTable(BaseTable):
+    """List-view table for Phone."""
+
+    pk = ToggleColumn()
+    device_name = tables.LinkColumn()
+    mac_address = tables.Column()
+    phone_system = tables.LinkColumn()
+    location = tables.LinkColumn()
+    actions = ButtonsColumn(models.Phone)
+
+    class Meta(BaseTable.Meta):
+        model = models.Phone
+        fields = ("pk", "device_name", "mac_address", "model", "phone_system", "location", "registration_status", "actions")
+        default_columns = ("pk", "device_name", "mac_address", "model", "phone_system", "registration_status", "actions")
+
+
+class TrunkTable(BaseTable):
+    """List-view table for Trunk."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    css = tables.LinkColumn(verbose_name="CSS")
+    actions = ButtonsColumn(models.Trunk)
+
+    class Meta(BaseTable.Meta):
+        model = models.Trunk
+        fields = ("pk", "name", "phone_system", "trunk_type", "destination_address", "destination_port", "css", "actions")
+        default_columns = ("pk", "name", "phone_system", "trunk_type", "destination_address", "actions")
+
+
+class RoutePatternTable(BaseTable):
+    """List-view table for RoutePattern."""
+
+    pk = ToggleColumn()
+    pattern = tables.LinkColumn()
+    partition = tables.LinkColumn()
+    css = tables.LinkColumn(verbose_name="CSS")
+    target_trunk = tables.LinkColumn()
+    target_dn = tables.LinkColumn(verbose_name="Target DN")
+    urgent = tables.BooleanColumn()
+    actions = ButtonsColumn(models.RoutePattern)
+
+    class Meta(BaseTable.Meta):
+        model = models.RoutePattern
+        fields = ("pk", "pattern", "partition", "css", "target_trunk", "target_dn", "urgent", "discard_digits", "actions")
+        default_columns = ("pk", "pattern", "partition", "target_trunk", "target_dn", "urgent", "actions")
+
+
+class AnalogGatewayTable(BaseTable):
+    """List-view table for AnalogGateway."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    location = tables.LinkColumn()
+    actions = ButtonsColumn(models.AnalogGateway)
+
+    class Meta(BaseTable.Meta):
+        model = models.AnalogGateway
+        fields = ("pk", "name", "phone_system", "location", "model", "protocol", "actions")
+        default_columns = ("pk", "name", "phone_system", "location", "model", "protocol", "actions")

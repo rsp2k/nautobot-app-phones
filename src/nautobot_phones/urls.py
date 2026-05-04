@@ -14,5 +14,15 @@ app_name = "nautobot_phones"
 
 router = NautobotUIViewSetRouter()
 router.register("phone-systems", views.PhoneSystemUIViewSet)
+router.register("carriers", views.CarrierUIViewSet)
+router.register("partitions", views.PartitionUIViewSet)
+router.register("calling-search-spaces", views.CallingSearchSpaceUIViewSet)
+router.register("directory-numbers", views.DirectoryNumberUIViewSet)
+router.register("did-blocks", views.DIDBlockUIViewSet)
+router.register("dids", views.DIDUIViewSet)
+router.register("phones", views.PhoneUIViewSet)
+router.register("trunks", views.TrunkUIViewSet)
+router.register("route-patterns", views.RoutePatternUIViewSet)
+router.register("analog-gateways", views.AnalogGatewayUIViewSet)
 
 urlpatterns = router.urls
