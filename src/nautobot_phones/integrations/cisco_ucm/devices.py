@@ -19,12 +19,15 @@ since one-port devices don't need the voice/data VLAN abstraction.
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
+
+from django.contrib.contenttypes.models import ContentType
 from django.utils.text import slugify
 
 from nautobot.dcim.choices import InterfaceTypeChoices
 from nautobot.dcim.models import Device, DeviceType, Interface, Manufacturer
 from nautobot.extras.models import Role, Status
-from django.contrib.contenttypes.models import ContentType
+from nautobot.ipam.models import IPAddress, IPAddressToInterface, Namespace, Prefix
 
 from nautobot_phones.models import Phone
 
@@ -96,7 +99,22 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
                 location=location,
                 serial=str(phone.mac_address).upper() if phone.mac_address else "",
             )
-            _create_phone_interfaces(device, phone.model or "")
+            voice_iface, network_iface = _create_phone_interfaces(device, phone.model or "")
+            # Assign Phone.last_registered_ip to Voice (preferred) or Network
+            # interface, and set as the Device's primary IPv4 so it shows up
+            # in the standard Device list view and SNMP-discovery flows.
+            if phone.last_registered_ip:
+                ip_iface = voice_iface or network_iface
+                ip_addr = _ensure_ip_address(phone.last_registered_ip)
+                IPAddressToInterface.objects.get_or_create(
+                    ip_address=ip_addr,
+                    interface=ip_iface,
+                )
+                if ":" in phone.last_registered_ip:
+                    device.primary_ip6 = ip_addr
+                else:
+                    device.primary_ip4 = ip_addr
+                device.save()
             phone.device = device
             phone.save()
             created += 1
@@ -136,8 +154,11 @@ def _ensure_device_type(manufacturer: Manufacturer, model: str) -> DeviceType:
     return dt
 
 
-def _create_phone_interfaces(device: Device, phone_model: str) -> None:
+def _create_phone_interfaces(device: Device, phone_model: str) -> tuple[Interface | None, Interface]:
     """Create Network / PC / Voice interfaces on the new Device.
+
+    Returns (voice_iface, network_iface) — voice_iface is None for
+    single-port models. Caller uses one of them as the IP-binding target.
 
     Network is always created. PC + Voice only when the model has a
     pass-through port (most modern Cisco IP phones — see _SINGLE_PORT_MODELS
@@ -153,6 +174,7 @@ def _create_phone_interfaces(device: Device, phone_model: str) -> None:
         description="Upstream port — cabled to switch/patch panel. Carries data + voice VLANs.",
     )
 
+    voice = None
     if has_pc_port(phone_model):
         Interface.objects.create(
             device=device,
@@ -164,7 +186,7 @@ def _create_phone_interfaces(device: Device, phone_model: str) -> None:
         # Voice is virtual (hard-wired internally, no connector). Parented to
         # Network so cable traces show the voice traffic flowing through the
         # physical port. Operator assigns the actual voice VLAN.
-        Interface.objects.create(
+        voice = Interface.objects.create(
             device=device,
             name="Voice",
             type=InterfaceTypeChoices.TYPE_VIRTUAL,
@@ -172,3 +194,33 @@ def _create_phone_interfaces(device: Device, phone_model: str) -> None:
             status=active_iface,
             description="Voice VLAN sub-interface (no connector). Assign voice VLAN below.",
         )
+    return voice, network
+
+
+def _ensure_ip_address(ip_str: str) -> IPAddress:
+    """Find or create an IPAddress for `ip_str`, hosting it under a /32 (or
+    /128) Prefix in the Global namespace.
+
+    Nautobot 3.x requires every IPAddress to have a parent Prefix in some
+    Namespace. We use the default 'Global' namespace and create a single-
+    host Prefix per IP — operators can later move the IP under a wider
+    prefix if they prefer (Nautobot supports re-parenting).
+    """
+    parsed = _ipaddress.ip_address(ip_str)
+    is_v6 = parsed.version == 6
+    mask = 128 if is_v6 else 32
+    ns = Namespace.objects.get(name="Global")
+    prefix_str = f"{ip_str}/{mask}"
+    active_pfx = Status.objects.get_for_model(Prefix).get(name="Active")
+    active_ip = Status.objects.get_for_model(IPAddress).get(name="Active")
+    prefix, _ = Prefix.objects.get_or_create(
+        prefix=prefix_str,
+        namespace=ns,
+        defaults={"status": active_pfx, "type": "container"},
+    )
+    ip, _ = IPAddress.objects.get_or_create(
+        host=ip_str,
+        parent=prefix,
+        defaults={"status": active_ip, "mask_length": mask},
+    )
+    return ip
