@@ -39,14 +39,21 @@ from nautobot_phones.diffsync.models import (
 def _get(obj: Any, name: str, default=None) -> Any:
     """Tolerant attribute access for AXL response objects.
 
-    AXL/zeep return objects look like Pydantic-ish attribute holders, but
-    occasionally show up as dicts (zeep-version dependent). Try both.
+    Zeep response objects expose attributes via `getattr` only — they
+    don't have a working `.get()` method despite implementing partial
+    Mapping semantics. Plain dicts (for nested zeep types like
+    routePartitionName.{_value_1}) need `.get()`. Handle both.
+
+    AttributeError on zeep is non-existent fields — return default.
     """
     if obj is None:
         return default
-    if hasattr(obj, "__getitem__") and not hasattr(obj, "__getattr__"):
+    if isinstance(obj, dict):
         return obj.get(name, default)
-    return getattr(obj, name, default)
+    try:
+        return getattr(obj, name, default)
+    except AttributeError:
+        return default
 
 
 class CUCMSourceAdapter(Adapter):
@@ -76,6 +83,11 @@ class CUCMSourceAdapter(Adapter):
 
     type = "cisco-ucm"
 
+    # CUCM models a "null partition" as an absent routePartitionName ref.
+    # We synthesize a Partition record under this name so DiffSync has
+    # something concrete to point partition-less DNs/patterns at.
+    NULL_PARTITION_NAME = "(none)"
+
     def __init__(self, *args, client, phone_system_record, job=None, **kwargs):
         """Take a configured AXLClient and the PhoneSystem record it belongs to.
 
@@ -88,6 +100,19 @@ class CUCMSourceAdapter(Adapter):
         self.client = client
         self.phone_system_record = phone_system_record
         self.job = job
+
+    def _resolve_partition(self, ref: Any) -> str:
+        """Pull the partition name out of a routePartitionName ref.
+
+        AXL returns these as XFkType objects with `_value_1` carrying the
+        actual name — None when the record has no partition assigned.
+        Map None/empty to NULL_PARTITION_NAME so downstream DiffSync sees
+        a concrete identifier.
+        """
+        if ref is None:
+            return self.NULL_PARTITION_NAME
+        name = _get(ref, "_value_1", "") or ""
+        return name if name else self.NULL_PARTITION_NAME
 
     def load(self) -> None:
         """Walk AXL listX operations and populate DiffSync models."""
@@ -117,6 +142,13 @@ class CUCMSourceAdapter(Adapter):
                 phone_system__name=ps_name,
                 description=_get(row, "description", "") or "",
             ))
+        # Add the synthetic null-partition so partition-less DNs/patterns
+        # have a concrete partition identifier to point at.
+        self.add(self.partition(
+            name=self.NULL_PARTITION_NAME,
+            phone_system__name=ps_name,
+            description="Synthetic placeholder for CUCM lines/patterns with no explicit partition.",
+        ))
 
     def _load_calling_search_spaces(self, ps_name: str) -> None:
         for row in self.client.list_css():
@@ -128,8 +160,7 @@ class CUCMSourceAdapter(Adapter):
 
     def _load_directory_numbers(self, ps_name: str) -> None:
         for row in self.client.list_lines():
-            partition_ref = _get(row, "routePartitionName")
-            partition_name = _get(partition_ref, "_value_1", "") if partition_ref is not None else ""
+            partition_name = self._resolve_partition(_get(row, "routePartitionName"))
             self.add(self.directory_number(
                 extension=_get(row, "pattern", ""),
                 partition__name=partition_name,
@@ -189,8 +220,7 @@ class CUCMSourceAdapter(Adapter):
 
     def _load_route_patterns(self, ps_name: str) -> None:
         for row in self.client.list_route_patterns():
-            partition_ref = _get(row, "routePartitionName")
-            partition_name = _get(partition_ref, "_value_1", "") if partition_ref else ""
+            partition_name = self._resolve_partition(_get(row, "routePartitionName"))
             self.add(self.route_pattern(
                 pattern=_get(row, "pattern", ""),
                 partition__name=partition_name,

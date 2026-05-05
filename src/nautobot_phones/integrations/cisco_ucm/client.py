@@ -103,87 +103,120 @@ class AXLClient:
 
     # -- Read-only AXL list methods ------------------------------------------
     #
-    # Each method calls one CUCM `listX` operation. AXL list operations
-    # require a `searchCriteria` dict (use `{"name": "%"}` for "all") and
-    # an optional `returnedTags` dict (controls which fields come back).
-    # We default to "all rows, all fields" — adapter callers can override.
+    # Each method calls one CUCM `listX` operation. AXL requires both a
+    # `searchCriteria` dict (use `{"name": "%"}` for "all") AND a
+    # `returnedTags` dict (enumerates the fields to return on each row).
+    # `returnedTags` is REQUIRED — empty dict gives empty rows, so each
+    # method declares a default tag set tuned to what our adapter needs.
 
-    def list_phones(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    # Per-operation defaults for AXL request shapes. Each op has different
+    # valid fields for both `searchCriteria` (filter) and `returnedTags`
+    # (which scalar fields come back). Discovered empirically via AXL 15.0
+    # schema errors — values reflect what the server actually accepts.
+    #
+    # Note: complex/nested fields (registration status, SIP trunk
+    # destinations, line membership lists) are NOT available via listX;
+    # they require per-record getX calls. v1 syncs the listX subset.
+
+    _DEFAULT_SEARCH: dict[str, dict] = {
+        # Most ops use `name` as the wildcard key.
+        "listRoutePartition": {"name": "%"},
+        "listCss": {"name": "%"},
+        "listPhone": {"name": "%"},
+        "listSipTrunk": {"name": "%"},
+        # These ops use a different identifier:
+        "listLine": {"pattern": "%"},
+        "listRoutePattern": {"pattern": "%"},
+        "listGateway": {"domainName": "%"},
+    }
+
+    _DEFAULT_TAGS: dict[str, dict] = {
+        "listRoutePartition": {"name": "", "description": ""},
+        "listCss": {"name": "", "description": ""},
+        "listLine": {
+            "pattern": "",
+            "description": "",
+            "alertingName": "",
+            "routePartitionName": "",
+            "voiceMailProfileName": "",
+        },
+        "listPhone": {
+            "name": "",
+            "description": "",
+            "product": "",
+            "model": "",
+        },
+        "listSipTrunk": {
+            "name": "",
+            "description": "",
+        },
+        "listRoutePattern": {
+            "pattern": "",
+            "description": "",
+            "routePartitionName": "",
+            "patternUrgency": "",
+        },
+        "listGateway": {
+            "domainName": "",
+            "description": "",
+            "product": "",
+            "protocol": "",
+        },
+    }
+
+    def list_phones(self, **overrides) -> list[Any]:
         """`listPhone` — registered phone devices."""
-        return self._list("listPhone", "phone", search_criteria, returned_tags)
+        return self._list("listPhone", "phone", **overrides)
 
-    def list_lines(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
-        """`listLine` — directory numbers (DNs) in CUCM terminology.
+    def list_lines(self, **overrides) -> list[Any]:
+        """`listLine` — directory numbers (DNs in CUCM terminology).
 
         NOTE: AXL's `Line` object IS a DN. Our app's Line model is something
         different (a phone-button appearance). Don't confuse the two.
         """
-        return self._list("listLine", "line", search_criteria, returned_tags)
+        return self._list("listLine", "line", **overrides)
 
-    def list_route_partitions(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    def list_route_partitions(self, **overrides) -> list[Any]:
         """`listRoutePartition` — partitions in our model."""
-        return self._list("listRoutePartition", "routePartition", search_criteria, returned_tags)
+        return self._list("listRoutePartition", "routePartition", **overrides)
 
-    def list_css(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    def list_css(self, **overrides) -> list[Any]:
         """`listCss` — calling search spaces."""
-        return self._list("listCss", "css", search_criteria, returned_tags)
+        return self._list("listCss", "css", **overrides)
 
-    def list_sip_trunks(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    def list_sip_trunks(self, **overrides) -> list[Any]:
         """`listSipTrunk` — SIP trunks."""
-        return self._list("listSipTrunk", "sipTrunk", search_criteria, returned_tags)
+        return self._list("listSipTrunk", "sipTrunk", **overrides)
 
-    def list_route_patterns(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    def list_route_patterns(self, **overrides) -> list[Any]:
         """`listRoutePattern` — outbound routing patterns."""
-        return self._list("listRoutePattern", "routePattern", search_criteria, returned_tags)
+        return self._list("listRoutePattern", "routePattern", **overrides)
 
-    def list_gateways(
-        self,
-        search_criteria: Optional[dict] = None,
-        returned_tags: Optional[dict] = None,
-    ) -> list[Any]:
+    def list_gateways(self, **overrides) -> list[Any]:
         """`listGateway` — analog gateways (MGCP/SIP/SCCP)."""
-        return self._list("listGateway", "gateway", search_criteria, returned_tags)
+        return self._list("listGateway", "gateway", **overrides)
 
     def _list(
         self,
         operation: str,
         result_key: str,
-        search_criteria: Optional[dict],
-        returned_tags: Optional[dict],
+        search_criteria: Optional[dict] = None,
+        returned_tags: Optional[dict] = None,
     ) -> list[Any]:
         """Internal: call a `listX` operation and unwrap the result.
 
-        AXL list responses are shaped `{"return": {<result_key>: [...]}}`,
-        but if zero rows match, the inner key may be missing entirely.
-        Handle both shapes defensively.
+        Per-operation defaults for `returned_tags` come from `_DEFAULT_TAGS`
+        — callers can override by passing a custom dict to override the
+        full set or `search_criteria` to scope to a subset.
         """
         op = getattr(self._service, operation)
-        response = op(
-            searchCriteria=search_criteria or {"name": "%"},
-            returnedTags=returned_tags,
-        )
-        return getattr(getattr(response, "return_", None) or response.get("return", {}), result_key, []) or []
+        criteria = search_criteria if search_criteria is not None else self._DEFAULT_SEARCH.get(operation, {"name": "%"})
+        tags = returned_tags if returned_tags is not None else self._DEFAULT_TAGS.get(operation, {"name": ""})
+        response = op(searchCriteria=criteria, returnedTags=tags)
+        # AXL list responses: {"return": {<result_key>: [row, row, ...]}}.
+        # When zero rows match, the inner key may be missing entirely.
+        return_obj = getattr(response, "return_", None) or getattr(response, "return", None)
+        if return_obj is None:
+            return []
+        rows = getattr(return_obj, result_key, None)
+        return rows or []
