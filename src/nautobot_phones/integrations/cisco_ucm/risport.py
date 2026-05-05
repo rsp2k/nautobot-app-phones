@@ -112,6 +112,15 @@ def _ip(elem: Optional[ET.Element]) -> str:
 
 
 def _parse_device(elem: ET.Element) -> dict:
+    """Extract per-device fields from a RisPort `<item>` element.
+
+    Returns a flat dict so caller can index by device name. The expensive
+    fields are the live-status set: ActiveLoadID gives us the running
+    Webex/Jabber/firmware build, InactiveLoadID is the rollback target,
+    LoginUserId tells us who's signed in right now (vs AXL's configured
+    owner), and StatusReason explains why a phone is in its current
+    registration state.
+    """
     ip_elem = None
     for child in elem:
         if _local(child) in ("IPAddress", "IpAddress"):
@@ -121,6 +130,10 @@ def _parse_device(elem: ET.Element) -> dict:
         "name": _text(elem, "Name"),
         "ip_address": _ip(ip_elem),
         "status": _text(elem, "Status"),
+        "active_load": _text(elem, "ActiveLoadID"),
+        "inactive_load": _text(elem, "InactiveLoadID"),
+        "login_user_id": _text(elem, "LoginUserId"),
+        "status_reason": _text(elem, "StatusReason"),
     }
 
 

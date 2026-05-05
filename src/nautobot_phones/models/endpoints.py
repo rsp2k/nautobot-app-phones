@@ -89,6 +89,40 @@ class Phone(PrimaryModel):
         verbose_name="Last Registered IP",
         help_text="IP address from the most recent RisPort70 registration record.",
     )
+    # ---- Live Status (from RisPort70 — populated when enrich_phone_ip=True) --
+    # Distinct from AXL config: AXL tells us what's CONFIGURED, RIS tells us
+    # what's actually RUNNING right now. ActiveLoadID is the running firmware
+    # (SEP) or Webex/Jabber client build (CSF/TCT/BOT). InactiveLoadID is the
+    # rollback target (relevant for IP phones; equal to active for softphones).
+    # All Live Status fields go stale fast — pair with live_status_polled_at
+    # so operators know when "Webex build 46.4.0" actually arrived.
+    active_load = models.CharField(
+        max_length=128, blank=True,
+        verbose_name="Active Load",
+        help_text="Currently-running firmware (SEP) or Webex/Jabber client build "
+                  "(CSF/TCT/BOT). Example: 'Webex_for_Windows-46.4.0.34752' or "
+                  "'sip78xx.14-3-1-0001-60'.",
+    )
+    inactive_load = models.CharField(
+        max_length=128, blank=True,
+        help_text="Rollback-target firmware. Differs from active_load when an "
+                  "upgrade is in progress or the new firmware is suspect.",
+    )
+    live_login_user = models.CharField(
+        max_length=100, blank=True,
+        help_text="User currently signed in to this device (live, from RIS). "
+                  "May differ from owner_user_id, which is the AXL-configured assignee.",
+    )
+    status_reason = models.CharField(
+        max_length=100, blank=True,
+        help_text='Why the phone is in its current registration state '
+                  '(e.g. "Pre-registration", "Authentication failed").',
+    )
+    live_status_polled_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Live Status Polled At",
+        help_text="When the live status fields above were last updated from RisPort70.",
+    )
 
     # ---- Device Information --------------------------------------------------
     # CCM calls these "Device Pool", "Common Phone Profile", etc. We store

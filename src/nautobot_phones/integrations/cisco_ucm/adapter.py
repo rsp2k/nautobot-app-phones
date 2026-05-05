@@ -154,9 +154,15 @@ class CUCMSourceAdapter(Adapter):
         self.job = job
         self.enrich_phone_lines = enrich_phone_lines
         self.enrich_phone_ip = enrich_phone_ip
-        # Populated by _fetch_ris_data when enrich_phone_ip=True; map of
-        # CUCM device-name (e.g. "SEPCAFEBABE0001") to IP address string.
-        self._ip_map: dict[str, str] = {}
+        # Populated by _fetch_ris_data when enrich_phone_ip=True. Maps CUCM
+        # device-name (e.g. "SEPCAFEBABE0001") to the full RIS dict — IP,
+        # status, active/inactive load, login user, status reason. None for
+        # phones that didn't register in the RIS time window.
+        self._ris_map: dict[str, dict] = {}
+        # Timestamp of the most recent RIS poll — used to populate Phone's
+        # `live_status_polled_at` so operators know when "ActiveLoadID =
+        # Webex 46.4.0" was actually true.
+        self._ris_polled_at = None
         # When enrich_phone_lines is off, exclude all per-phone button models
         # (Line, SpeedDial, PhoneServiceUrl) from the diff so existing
         # records in Nautobot aren't wiped. Job pairs this with the same
@@ -315,7 +321,23 @@ class CUCMSourceAdapter(Adapter):
                 mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
             sep_devices.append((device_name, phone_row))
 
-            ip = self._ip_map.get(device_name) or None
+            # Pull live-status fields from the RIS map (populated when
+            # enrich_phone_ip=True). All keys default to empty/None when this
+            # phone wasn't seen in the RIS time window, so phones can keep
+            # blank live-status fields without us having to special-case here.
+            ris = self._ris_map.get(device_name, {})
+            ip = (ris.get("ip_address") or "").strip() or None
+            ris_status = (ris.get("status") or "").strip().lower()
+            # Map RIS status strings to our RegistrationStatusChoices set.
+            # RIS reports "Registered", "UnRegistered", "Rejected", "Unknown",
+            # "PartiallyRegistered". Anything else stays "unknown".
+            ris_status_map = {
+                "registered": "registered",
+                "unregistered": "unregistered",
+                "partiallyregistered": "partially_registered",
+            }
+            registration = ris_status_map.get(ris_status.replace(" ", ""),
+                                              _get(phone_row, "currentRegistrationStatus", "unknown") or "unknown")
             # FK fields (Device Pool, CSS, security/SIP profiles, etc.) come
             # back as {_value_1: "Name", uuid: "..."}. Resolve to plain names.
             def _fk_name(field_name):
@@ -351,8 +373,14 @@ class CUCMSourceAdapter(Adapter):
                 mac_address=mac_formatted,
                 device_kind=kind,
                 description=_get(phone_row, "description", "") or "",
-                registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
+                registration_status=registration,
                 last_registered_ip=ip,
+                # Live status from RisPort70 (only present when enrich_phone_ip=True)
+                active_load=(ris.get("active_load") or "").strip(),
+                inactive_load=(ris.get("inactive_load") or "").strip(),
+                live_login_user=(ris.get("login_user_id") or "").strip(),
+                status_reason=(ris.get("status_reason") or "").strip(),
+                live_status_polled_at=self._ris_polled_at,
                 # CCM Location (Call Admission Control) + Network Location
                 ccm_location=_fk_name("locationName"),
                 network_location=(_get(phone_row, "networkLocation", "") or ""),
@@ -413,12 +441,18 @@ class CUCMSourceAdapter(Adapter):
             self._enrich_lines(ps_name, sep_devices)
 
     def _fetch_ris_data(self) -> None:
-        """Pull live registration/IP data from RisPort70 into _ip_map.
+        """Pull live registration data from RisPort70 into _ris_map.
 
         Single bulk call (auto-paginated) — much cheaper than per-phone
         getPhone. Only used when enrich_phone_ip=True. Errors are logged
-        but non-fatal: phones just keep their IP=None.
+        but non-fatal: phones just keep their live-status fields blank.
+
+        Captures: IP, status, ActiveLoadID (running firmware/Webex build),
+        InactiveLoadID (rollback target), LoginUserId (currently signed-in
+        user), StatusReason (why this status). All sourced from the same
+        RIS response so there's no extra cost vs the previous IP-only fetch.
         """
+        from datetime import datetime, timezone
         if self.job:
             self.job.logger.info("Fetching live registration data from RisPort70...")
         try:
@@ -427,13 +461,18 @@ class CUCMSourceAdapter(Adapter):
             if self.job:
                 self.job.logger.warning(f"  RisPort fetch failed: {type(e).__name__}: {e}")
             return
+        self._ris_polled_at = datetime.now(timezone.utc)
         for dev in devices:
-            ip = (dev.get("ip_address") or "").strip()
-            name = dev.get("name") or ""
-            if name and ip:
-                self._ip_map[name] = ip
+            name = (dev.get("name") or "").strip()
+            if not name:
+                continue
+            self._ris_map[name] = dev  # full dict — caller indexes into it
         if self.job:
-            self.job.logger.info(f"  RisPort returned {len(self._ip_map)} phones with IPs")
+            with_loads = sum(1 for d in self._ris_map.values() if (d.get("active_load") or "").strip())
+            self.job.logger.info(
+                f"  RisPort returned {len(self._ris_map)} devices "
+                f"({with_loads} with ActiveLoadID — running firmware/Webex builds)"
+            )
 
     def _enrich_lines(self, ps_name: str, sep_devices: list) -> None:
         """Walk each SEP* phone via getPhone to pull all four button-type arrays.

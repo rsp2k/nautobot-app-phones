@@ -280,9 +280,17 @@ class PhoneUIViewSet(NautobotUIViewSet):
                     "device_name", "device_kind", "description", "mac_address", "model",
                     "phone_system", "device", "location",  # `location` is a @property reading device.location
                     "ccm_location", "network_location",
-                    "registration_status", "last_registered_ip",
                 ],
                 key_transforms={"location": "Physical Location (from Device)"},
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=150,
+                label="Live Status (from RisPort70)",
+                fields=[
+                    "registration_status", "active_load", "inactive_load",
+                    "live_login_user", "status_reason",
+                    "last_registered_ip", "live_status_polled_at",
+                ],
                 value_transforms={"last_registered_ip": [_https_link]},
             ),
             ObjectFieldsPanel(

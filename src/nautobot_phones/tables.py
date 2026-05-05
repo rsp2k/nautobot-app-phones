@@ -131,6 +131,7 @@ class PhoneTable(BaseTable):
     device_name = tables.LinkColumn()
     device_kind = tables.Column(verbose_name="Kind")
     mac_address = tables.Column()
+    active_load = tables.Column(verbose_name="Running Load")
     # `model` and `physical_location` are @property accessors on Phone (read
     # through device.device_type.model and device.location). Non-sortable
     # since they're not real DB columns — operators wanting to sort/filter
@@ -151,7 +152,9 @@ class PhoneTable(BaseTable):
             "pk", "device_name", "device_kind", "mac_address", "model", "description",
             "phone_system", "physical_location", "ccm_location",
             "device_pool", "owner_user_id",
-            "registration_status", "last_registered_ip", "actions",
+            "registration_status", "last_registered_ip",
+            "active_load", "inactive_load", "live_login_user",
+            "actions",
         )
         default_columns = (
             "pk", "device_name", "device_kind", "description", "mac_address", "model",

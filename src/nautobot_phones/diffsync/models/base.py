@@ -14,6 +14,7 @@ this lets the contrib framework navigate FKs by their natural key without
 us hand-writing prefetch logic.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from nautobot_ssot.contrib import NautobotModel
@@ -113,6 +114,9 @@ class PhoneModel(NautobotModel):
         "mac_address", "device_kind", "description",
         "registration_status", "last_registered_ip",
         "ccm_location", "network_location",
+        # Live Status (from RisPort70 — only diffed when RIS enrichment is on)
+        "active_load", "inactive_load", "live_login_user", "status_reason",
+        "live_status_polled_at",
         # Device Information
         "device_pool", "common_phone_profile", "common_device_configuration",
         "phone_button_template", "softkey_template",
@@ -137,6 +141,12 @@ class PhoneModel(NautobotModel):
     last_registered_ip: Optional[str] = None
     ccm_location: str = ""
     network_location: str = ""
+    # Live Status
+    active_load: str = ""
+    inactive_load: str = ""
+    live_login_user: str = ""
+    status_reason: str = ""
+    live_status_polled_at: Optional[datetime] = None
     # Device Information
     device_pool: str = ""
     common_phone_profile: str = ""
