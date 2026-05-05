@@ -10,6 +10,11 @@ menu_items = (
     NavMenuTab(
         name="Phones",
         weight=950,
+        # Custom Lucide-style icon shipped under static/nautobot_phones/img/.
+        # Nautobot treats any value containing '/' as a static-file URL,
+        # otherwise it looks up nautobot-icons/<name>.svg from its built-in set
+        # (which doesn't include a phone icon).
+        icon="nautobot_phones/img/phone.svg",
         groups=(
             NavMenuGroup(
                 name="Systems",
