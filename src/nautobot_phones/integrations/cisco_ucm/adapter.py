@@ -77,8 +77,8 @@ class CUCMSourceAdapter(Adapter):
         "phone",
         "line",
         "trunk",
-        "route_pattern",
-        "analog_gateway",
+        # route_pattern + analog_gateway deferred until we add the
+        # per-record getX enrichment phase (see load() comment).
     )
 
     type = "cisco-ucm"
@@ -115,8 +115,14 @@ class CUCMSourceAdapter(Adapter):
         return name if name else self.NULL_PARTITION_NAME
 
     def load(self) -> None:
-        """Walk AXL listX operations and populate DiffSync models."""
-        # Synthetic top-level record for the cluster itself.
+        """Walk AXL listX operations and populate DiffSync models.
+
+        v1 limitations: RoutePattern + AnalogGateway require per-record
+        getX calls for target/protocol fields (listX returns scalars
+        only). Skipping them in v1 — the partial data they'd produce
+        violates our DB constraints (RoutePattern XOR check). Future
+        enrichment phase can add the getX two-step.
+        """
         ps = self.phone_system_record
         self.add(self.phone_system(
             name=ps.name,
@@ -130,8 +136,8 @@ class CUCMSourceAdapter(Adapter):
         self._load_directory_numbers(ps.name)
         self._load_phones_and_lines(ps.name)
         self._load_trunks(ps.name)
-        self._load_route_patterns(ps.name)
-        self._load_gateways(ps.name)
+        # self._load_route_patterns(ps.name)  # v2 — needs getRoutePattern enrichment
+        # self._load_gateways(ps.name)        # v2 — needs getGateway enrichment
 
     # -- Per-collection loaders ----------------------------------------------
 
@@ -171,10 +177,20 @@ class CUCMSourceAdapter(Adapter):
             ))
 
     def _load_phones_and_lines(self, ps_name: str) -> None:
+        skipped_non_sep = 0
         for phone_row in self.client.list_phones():
-            device_name = _get(phone_row, "name", "")
-            mac = (_get(phone_row, "name", "") or "").removeprefix("SEP").lower()
-            mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2)) if len(mac) == 12 else mac
+            device_name = _get(phone_row, "name", "") or ""
+
+            # CUCM phones come in many flavors: SEP* (physical), CSF*/TCT*/
+            # TAB* (softphones), BOT* (bots), CER-CTI-* (Emergency Responder
+            # CTI ports). Only SEP* devices have real MAC addresses. v1 syncs
+            # only the physical phones; softphones/CTI ports can land in a
+            # future phase with a synthetic-MAC scheme or a relaxed schema.
+            if not device_name.startswith("SEP") or len(device_name) != 15:
+                skipped_non_sep += 1
+                continue
+            mac = device_name.removeprefix("SEP").lower()
+            mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
 
             self.add(self.phone(
                 mac_address=mac_formatted,
@@ -203,6 +219,9 @@ class CUCMSourceAdapter(Adapter):
                     label=_get(line, "label", "") or "",
                     ring_setting=_get(line, "ringSetting", "") or "",
                 ))
+
+        if skipped_non_sep and self.job:
+            self.job.logger.info(f"Skipped {skipped_non_sep} non-SEP phone records (softphones/CTI ports)")
 
     def _load_trunks(self, ps_name: str) -> None:
         for row in self.client.list_sip_trunks():

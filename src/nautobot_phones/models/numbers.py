@@ -84,6 +84,18 @@ class DirectoryNumber(PrimaryModel):
         verbose_name = "directory number"
         verbose_name_plural = "directory numbers"
 
+    def clean_fields(self, exclude=None) -> None:
+        """Auto-populate the denormalized phone_system FK from partition.
+
+        Must run before super().clean_fields() because that's where the
+        null=False validator on phone_system fires. The field is
+        denormalized for query speed but always equals
+        partition.phone_system, so callers only need to set partition.
+        """
+        if self.partition_id and not self.phone_system_id:
+            self.phone_system_id = self.partition.phone_system_id
+        super().clean_fields(exclude=exclude)
+
     def __str__(self) -> str:
         """Display string."""
         return f"{self.partition.name}/{self.extension}"
