@@ -86,8 +86,8 @@ class CUCMSourceAdapter(Adapter):
         "trunk",
         "route_list",
         "route_group",
-        # route_pattern + analog_gateway deferred until we add the
-        # per-record getX enrichment phase (see load() comment).
+        "route_pattern",
+        # analog_gateway deferred until we add per-record getGateway enrichment
     )
 
     type = "cisco-ucm"
@@ -170,7 +170,7 @@ class CUCMSourceAdapter(Adapter):
         self._load_trunks(ps.name)
         self._load_route_lists(ps.name)
         self._load_route_groups(ps.name)
-        # self._load_route_patterns(ps.name)  # v2 — needs getRoutePattern enrichment
+        self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
         # self._load_gateways(ps.name)        # v2 — needs getGateway enrichment
 
     # -- Per-collection loaders ----------------------------------------------
@@ -391,14 +391,44 @@ class CUCMSourceAdapter(Adapter):
             ))
 
     def _load_route_patterns(self, ps_name: str) -> None:
+        # Two-phase: listRoutePattern for IDs/scalars, getRoutePattern per
+        # record to resolve the destination element. listX doesn't expose
+        # destination at all — it's only available via getX. ~165 patterns
+        # per typical cluster makes this ~30s. Patterns whose destination
+        # resolves to neither a RouteList nor a Gateway are skipped (the
+        # XOR check constraint requires exactly one target).
         for row in self.client.list_route_patterns():
-            partition_name = self._resolve_partition(_get(row, "routePartitionName"))
+            uuid = _get(row, "uuid")
+            if not uuid:
+                continue
+            try:
+                full = getattr(self.client._service.getRoutePattern(uuid=uuid), "return").routePattern
+            except Exception:
+                continue
+            pattern = _get(full, "pattern", "")
+            if not pattern:
+                continue
+            partition_name = self._resolve_partition(_get(full, "routePartitionName"))
+            urgent_raw = _get(full, "patternUrgency", "false")
+            urgent = str(urgent_raw).lower() in ("true", "1", "yes")
+            dest = _get(full, "destination")
+            rln = _get(dest, "routeListName") if dest else None
+            target_route_list = _get(rln, "_value_1") if rln else None
+            gn = _get(dest, "gatewayName") if dest else None
+            target_trunk = _get(gn, "_value_1") if gn else None
+            if not target_route_list and not target_trunk:
+                continue  # no resolvable target — skip rather than violate the XOR constraint
+            css_ref = _get(full, "callingSearchSpaceName")
+            css_name = _get(css_ref, "_value_1") if css_ref else None
             self.add(self.route_pattern(
-                pattern=_get(row, "pattern", ""),
+                pattern=pattern,
                 partition__name=partition_name,
                 partition__phone_system__name=ps_name,
-                urgent=bool(_get(row, "patternUrgency", False)),
-                discard_digits=_get(row, "discardDigits", "") or "",
+                urgent=urgent,
+                discard_digits=_get(full, "discardDigits", "") or "",
+                target_trunk__name=target_trunk,
+                target_route_list__name=target_route_list,
+                css__name=css_name,
             ))
 
     def _load_gateways(self, ps_name: str) -> None:

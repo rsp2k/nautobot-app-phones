@@ -194,21 +194,31 @@ class RouteGroupModel(NautobotModel):
 class RoutePatternModel(NautobotModel):
     """DiffSync model for RoutePattern.
 
-    Either target_trunk OR target_dn is set (XOR enforced at the DB level).
-    Both attribute fields are optional; the create/update flow on the
-    Nautobot side resolves them to FK objects via natural keys.
+    Exactly one of target_trunk / target_route_list / target_dn is set
+    (XOR check constraint at the DB layer). Resolution happens via the
+    natural-key __name attributes — the contrib framework looks up the
+    matching ORM record at create/update time.
     """
 
     _model = models.RoutePattern
     _modelname = "route_pattern"
     _identifiers = ("pattern", "partition__name", "partition__phone_system__name")
-    _attributes = ("urgent", "discard_digits")
+    _attributes = (
+        "urgent",
+        "discard_digits",
+        "target_trunk__name",
+        "target_route_list__name",
+        "css__name",
+    )
 
     pattern: str
     partition__name: str
     partition__phone_system__name: str
     urgent: bool = False
     discard_digits: str = ""
+    target_trunk__name: Optional[str] = None
+    target_route_list__name: Optional[str] = None
+    css__name: Optional[str] = None
 
 
 class AnalogGatewayModel(NautobotModel):
