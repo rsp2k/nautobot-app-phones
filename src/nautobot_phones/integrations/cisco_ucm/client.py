@@ -124,6 +124,8 @@ class AXLClient:
         "listCss": {"name": "%"},
         "listPhone": {"name": "%"},
         "listSipTrunk": {"name": "%"},
+        "listRouteList": {"name": "%"},
+        "listRouteGroup": {"name": "%"},
         # These ops use a different identifier:
         "listLine": {"pattern": "%"},
         "listRoutePattern": {"pattern": "%"},
@@ -168,6 +170,14 @@ class AXLClient:
             "product": "",
             "protocol": "",
         },
+        "listRouteList": {
+            "name": "",
+            "description": "",
+        },
+        "listRouteGroup": {
+            "name": "",
+            "distributionAlgorithm": "",
+        },
     }
 
     def list_phones(self, **overrides) -> list[Any]:
@@ -201,6 +211,14 @@ class AXLClient:
     def list_gateways(self, **overrides) -> list[Any]:
         """`listGateway` — analog gateways (MGCP/SIP/SCCP)."""
         return self._list("listGateway", "gateway", **overrides)
+
+    def list_route_lists(self, **overrides) -> list[Any]:
+        """`listRouteList` — Route Lists."""
+        return self._list("listRouteList", "routeList", **overrides)
+
+    def list_route_groups(self, **overrides) -> list[Any]:
+        """`listRouteGroup` — Route Groups."""
+        return self._list("listRouteGroup", "routeGroup", **overrides)
 
     def _list(
         self,

@@ -27,6 +27,8 @@ from nautobot_phones.diffsync.models import (
     PartitionModel,
     PhoneModel,
     PhoneSystemModel,
+    RouteGroupModel,
+    RouteListModel,
     RoutePatternModel,
     TrunkModel,
 )
@@ -42,6 +44,8 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     phone = PhoneModel
     line = LineModel
     trunk = TrunkModel
+    route_list = RouteListModel
+    route_group = RouteGroupModel
     route_pattern = RoutePatternModel
     analog_gateway = AnalogGatewayModel
     analog_port = AnalogPortModel
@@ -54,6 +58,8 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "phone",
         "line",
         "trunk",
+        "route_list",
+        "route_group",
         "route_pattern",
         "analog_gateway",
         "analog_port",

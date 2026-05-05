@@ -142,6 +142,35 @@ class TrunkModel(NautobotModel):
     vendor_extras: dict = {}
 
 
+class RouteListModel(NautobotModel):
+    """DiffSync model for RouteList."""
+
+    _model = models.RouteList
+    _modelname = "route_list"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = ("description", "vendor_extras")
+
+    name: str
+    phone_system__name: str
+    description: str = ""
+    vendor_extras: dict = {}
+
+
+class RouteGroupModel(NautobotModel):
+    """DiffSync model for RouteGroup."""
+
+    _model = models.RouteGroup
+    _modelname = "route_group"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = ("distribution_algorithm", "description", "vendor_extras")
+
+    name: str
+    phone_system__name: str
+    distribution_algorithm: str = "top_down"
+    description: str = ""
+    vendor_extras: dict = {}
+
+
 class RoutePatternModel(NautobotModel):
     """DiffSync model for RoutePattern.
 

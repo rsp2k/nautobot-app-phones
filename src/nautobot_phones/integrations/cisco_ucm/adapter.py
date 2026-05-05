@@ -31,6 +31,8 @@ from nautobot_phones.diffsync.models import (
     PartitionModel,
     PhoneModel,
     PhoneSystemModel,
+    RouteGroupModel,
+    RouteListModel,
     RoutePatternModel,
     TrunkModel,
 )
@@ -66,6 +68,8 @@ class CUCMSourceAdapter(Adapter):
     phone = PhoneModel
     line = LineModel
     trunk = TrunkModel
+    route_list = RouteListModel
+    route_group = RouteGroupModel
     route_pattern = RoutePatternModel
     analog_gateway = AnalogGatewayModel
 
@@ -77,6 +81,8 @@ class CUCMSourceAdapter(Adapter):
         "phone",
         "line",
         "trunk",
+        "route_list",
+        "route_group",
         # route_pattern + analog_gateway deferred until we add the
         # per-record getX enrichment phase (see load() comment).
     )
@@ -136,6 +142,8 @@ class CUCMSourceAdapter(Adapter):
         self._load_directory_numbers(ps.name)
         self._load_phones_and_lines(ps.name)
         self._load_trunks(ps.name)
+        self._load_route_lists(ps.name)
+        self._load_route_groups(ps.name)
         # self._load_route_patterns(ps.name)  # v2 — needs getRoutePattern enrichment
         # self._load_gateways(ps.name)        # v2 — needs getGateway enrichment
 
@@ -222,6 +230,26 @@ class CUCMSourceAdapter(Adapter):
 
         if skipped_non_sep and self.job:
             self.job.logger.info(f"Skipped {skipped_non_sep} non-SEP phone records (softphones/CTI ports)")
+
+    def _load_route_lists(self, ps_name: str) -> None:
+        for row in self.client.list_route_lists():
+            self.add(self.route_list(
+                name=_get(row, "name", ""),
+                phone_system__name=ps_name,
+                description=_get(row, "description", "") or "",
+            ))
+
+    def _load_route_groups(self, ps_name: str) -> None:
+        for row in self.client.list_route_groups():
+            algo = (_get(row, "distributionAlgorithm", "top_down") or "top_down").lower()
+            # CCM uses "Top Down" / "Circular" — normalize to our enum.
+            algo_map = {"top down": "top_down", "topdown": "top_down", "circular": "circular"}
+            self.add(self.route_group(
+                name=_get(row, "name", ""),
+                phone_system__name=ps_name,
+                distribution_algorithm=algo_map.get(algo, "top_down"),
+                description=_get(row, "description", "") or "",
+            ))
 
     def _load_trunks(self, ps_name: str) -> None:
         for row in self.client.list_sip_trunks():
