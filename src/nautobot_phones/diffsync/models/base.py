@@ -175,12 +175,24 @@ class LineModel(NautobotModel):
     Identifier shape (phone, button_index) matches the Django unique_together;
     AXL returns lines as ordered children of phones, so the integer
     button_index lets DiffSync diff them set-comparably.
+
+    Per-line fields (max_num_calls, busy_trigger, MWI policy, recording flag)
+    come from getPhone enrichment — they're nested in lines.line[*] and
+    not present in the bulk listPhone response.
     """
 
     _model = models.Line
     _modelname = "line"
     _identifiers = ("phone__device_name", "phone__phone_system__name", "button_index")
-    _attributes = ("directory_number__extension", "directory_number__partition__name", "label", "ring_setting")
+    _attributes = (
+        "directory_number__extension", "directory_number__partition__name",
+        "label", "ring_setting",
+        # Per-line enrichment from getPhone
+        "max_num_calls", "busy_trigger", "mwl_policy", "audible_mwi",
+        "recording_flag", "missed_call_logging", "partition_usage",
+        "consecutive_ring_setting",
+        "ring_setting_idle_pickup_alert", "ring_setting_active_pickup_alert",
+    )
 
     phone__device_name: str
     phone__phone_system__name: str
@@ -189,6 +201,33 @@ class LineModel(NautobotModel):
     directory_number__partition__name: str
     label: str = ""
     ring_setting: str = ""
+    # Per-line enrichment
+    max_num_calls: Optional[int] = None
+    busy_trigger: Optional[int] = None
+    mwl_policy: str = ""
+    audible_mwi: str = ""
+    recording_flag: str = ""
+    missed_call_logging: bool = True
+    partition_usage: str = ""
+    consecutive_ring_setting: str = ""
+    ring_setting_idle_pickup_alert: str = ""
+    ring_setting_active_pickup_alert: str = ""
+
+
+class BusyLampFieldModel(NautobotModel):
+    """DiffSync model for a Busy Lamp Field button."""
+
+    _model = models.BusyLampField
+    _modelname = "busy_lamp_field"
+    _identifiers = ("phone__device_name", "phone__phone_system__name", "button_index")
+    _attributes = ("destination", "label", "asterisk_service")
+
+    phone__device_name: str
+    phone__phone_system__name: str
+    button_index: int
+    destination: str
+    label: str = ""
+    asterisk_service: bool = False
 
 
 class SpeedDialModel(NautobotModel):

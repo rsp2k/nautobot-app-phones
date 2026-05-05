@@ -189,8 +189,14 @@ class Line(BaseModel):
     """A single line/button appearance on a phone.
 
     Cisco phones have N line buttons; each can hold a DN with display label,
-    ring setting, etc. Pure junction model — no list/detail views of its own,
-    so we use BaseModel rather than PrimaryModel.
+    ring setting, plus per-appearance behavior fields (max calls, busy
+    trigger, ring overrides). Pure junction model — no list/detail views
+    of its own, so we use BaseModel rather than PrimaryModel.
+
+    Per-line enrichment fields (max_num_calls, busy_trigger, etc.) come
+    from getPhone's nested `lines.line[*]` array. The bulk listPhone
+    sync only provides DN reference + button_index + label/ring; the
+    rest needs the per-phone enrichment pass (gated by enrich_phone_lines).
     """
 
     phone = models.ForeignKey(
@@ -206,21 +212,37 @@ class Line(BaseModel):
     button_index = models.PositiveSmallIntegerField(
         help_text="1-based position of this line button on the phone.",
     )
-    label = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Short label shown next to the button (e.g. 'Sales').",
-    )
-    display = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Internal display text (vendor-specific).",
-    )
+    label = models.CharField(max_length=100, blank=True)
+    display = models.CharField(max_length=100, blank=True)
     ring_setting = models.CharField(
-        max_length=32,
-        blank=True,
+        max_length=32, blank=True,
         help_text="Ring behavior (e.g. 'Ring', 'Beep', 'Silent', 'Disable').",
     )
+    # Per-line enrichment from getPhone
+    max_num_calls = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Maximum simultaneous calls on this appearance (CCM default 4).",
+    )
+    busy_trigger = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Number of calls before this appearance reports busy (CCM default 2).",
+    )
+    mwl_policy = models.CharField(
+        max_length=32, blank=True,
+        verbose_name="MWI Policy",
+        help_text='Message Waiting Indicator policy ("Use System Policy", etc.).',
+    )
+    audible_mwi = models.CharField(max_length=16, blank=True, verbose_name="Audible MWI")
+    recording_flag = models.CharField(
+        max_length=64, blank=True,
+        help_text='"Call Recording Disabled", "Automatic Call Recording Enabled", etc.',
+    )
+    missed_call_logging = models.BooleanField(default=True)
+    partition_usage = models.CharField(max_length=32, blank=True)
+    # Inline ring-setting variants (idle pickup alert, active pickup alert)
+    consecutive_ring_setting = models.CharField(max_length=32, blank=True)
+    ring_setting_idle_pickup_alert = models.CharField(max_length=32, blank=True)
+    ring_setting_active_pickup_alert = models.CharField(max_length=32, blank=True)
 
     class Meta:
         """Meta options for Line."""
@@ -269,6 +291,52 @@ class SpeedDial(BaseModel):
         """Display string."""
         label = f" '{self.label}'" if self.label else ""
         return f"{self.phone.device_name} speed-dial[{self.button_index}] -> {self.number}{label}"
+
+
+class BusyLampField(BaseModel):
+    """A Busy Lamp Field (BLF) speed-dial button on a phone.
+
+    BLFs are speed-dial buttons that ALSO display the watched destination's
+    busy/idle/ringing state — the LED next to the button changes color
+    based on the destination phone's hook state. Common on receptionist
+    and admin-assistant phones for "is the boss on the phone right now?"
+    visibility plus one-touch dial.
+
+    Distinct from SpeedDial (which only dials, no presence visibility) and
+    from Line (which is the phone's own DN appearance). All three share
+    the phone's button-index space but are tracked in separate AXL arrays.
+    """
+
+    phone = models.ForeignKey(
+        to="nautobot_phones.Phone",
+        on_delete=models.CASCADE,
+        related_name="busy_lamp_fields",
+    )
+    button_index = models.PositiveSmallIntegerField(
+        help_text="1-based position within the phone's BLF array.",
+    )
+    destination = models.CharField(
+        max_length=64,
+        help_text="Watched destination DN (e.g. '1234'). Phone watches this for busy/idle.",
+    )
+    label = models.CharField(max_length=100, blank=True)
+    asterisk_service = models.BooleanField(
+        default=False,
+        help_text="Whether this BLF also includes the * speed-dial behavior.",
+    )
+
+    class Meta:
+        """Meta options for BusyLampField."""
+
+        ordering = ("phone", "button_index")
+        unique_together = (("phone", "button_index"),)
+        verbose_name = "Busy Lamp Field"
+        verbose_name_plural = "Busy Lamp Fields"
+
+    def __str__(self) -> str:
+        """Display string."""
+        label = f" '{self.label}'" if self.label else ""
+        return f"{self.phone.device_name} BLF[{self.button_index}] -> {self.destination}{label}"
 
 
 class PhoneServiceUrl(BaseModel):

@@ -73,6 +73,11 @@ class LineType(OptimizedNautobotObjectType):
         model = models.Line
 
 
+class BusyLampFieldType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.BusyLampField
+
+
 class TrunkType(OptimizedNautobotObjectType):
     class Meta:
         model = models.Trunk
@@ -136,6 +141,7 @@ graphql_types = [
     DIDAssignmentType,
     PhoneType,
     LineType,
+    BusyLampFieldType,
     TrunkType,
     RouteListType,
     RouteListMemberType,

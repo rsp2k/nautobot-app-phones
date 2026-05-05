@@ -21,6 +21,7 @@ from nautobot_ssot.contrib import NautobotAdapter as ContribNautobotAdapter
 from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     AnalogPortModel,
+    BusyLampFieldModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DirectoryNumberModel,
@@ -49,6 +50,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     phone = PhoneModel
     line = LineModel
     speed_dial = SpeedDialModel
+    busy_lamp_field = BusyLampFieldModel
     phone_service_url = PhoneServiceUrlModel
     trunk = TrunkModel
     route_list = RouteListModel
@@ -67,6 +69,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "phone",
         "line",
         "speed_dial",
+        "busy_lamp_field",
         "phone_service_url",
         "trunk",
         "route_list",
@@ -80,7 +83,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     # Models that only get populated by per-phone getPhone enrichment.
     # Excluded from the diff when enrich is off, so existing records aren't
     # orphan-deleted by a plain sync.
-    _BUTTON_MODELS = ("line", "speed_dial", "phone_service_url")
+    _BUTTON_MODELS = ("line", "speed_dial", "busy_lamp_field", "phone_service_url")
 
     def __init__(self, *args, include_lines=True, **kwargs):
         """`include_lines=False` excludes per-phone button models from diff.

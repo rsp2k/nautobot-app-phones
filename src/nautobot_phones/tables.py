@@ -270,16 +270,44 @@ class AnalogGatewayTable(BaseTable):
 
 
 class LineTable(BaseTable):
-    """Lines (phone-button appearances) — embedded on Phone or DN detail."""
+    """Lines (phone-button appearances) — embedded on Phone or DN detail.
+
+    Default columns surface the "what does this button DO" essentials. Per-line
+    enrichment (max calls, busy trigger, MWI policy, recording flag) shows up
+    when configured but defaults to "—" when getPhone enrichment hasn't run.
+    """
 
     button_index = tables.Column()
     phone = tables.LinkColumn()
     directory_number = tables.LinkColumn()
+    max_num_calls = tables.Column(verbose_name="Max Calls")
+    busy_trigger = tables.Column(verbose_name="Busy Trig")
 
     class Meta(BaseTable.Meta):
         model = models.Line
-        fields = ("button_index", "phone", "directory_number", "label", "ring_setting")
-        default_columns = ("button_index", "phone", "directory_number", "label")
+        fields = (
+            "button_index", "phone", "directory_number", "label", "ring_setting",
+            "max_num_calls", "busy_trigger", "mwl_policy", "recording_flag",
+            "partition_usage",
+        )
+        default_columns = (
+            "button_index", "phone", "directory_number", "label",
+            "max_num_calls", "busy_trigger",
+        )
+
+
+class BusyLampFieldTable(BaseTable):
+    """BLFs embedded on Phone detail."""
+
+    button_index = tables.Column()
+    destination = tables.Column()
+    label = tables.Column()
+    asterisk_service = tables.BooleanColumn(verbose_name="* Speed Dial")
+
+    class Meta(BaseTable.Meta):
+        model = models.BusyLampField
+        fields = ("button_index", "destination", "label", "asterisk_service")
+        default_columns = ("button_index", "destination", "label", "asterisk_service")
 
 
 class AnalogPortTable(BaseTable):

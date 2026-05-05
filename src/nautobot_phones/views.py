@@ -321,6 +321,12 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 order_by_fields=["button_index"],
             ),
             ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=250,
+                table_class=tables.BusyLampFieldTable, table_filter="phone",
+                table_title="Busy Lamp Fields (BLF)", exclude_columns=["phone"],
+                order_by_fields=["button_index"],
+            ),
+            ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=300,
                 table_class=tables.PhoneServiceUrlTable, table_filter="phone",
                 table_title="Service URLs", exclude_columns=["phone"],

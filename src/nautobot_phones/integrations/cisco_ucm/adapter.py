@@ -25,6 +25,7 @@ from diffsync import Adapter
 
 from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
+    BusyLampFieldModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DirectoryNumberModel,
@@ -88,6 +89,7 @@ class CUCMSourceAdapter(Adapter):
     phone = PhoneModel
     line = LineModel
     speed_dial = SpeedDialModel
+    busy_lamp_field = BusyLampFieldModel
     phone_service_url = PhoneServiceUrlModel
     trunk = TrunkModel
     route_list = RouteListModel
@@ -105,6 +107,7 @@ class CUCMSourceAdapter(Adapter):
         "phone",
         "line",
         "speed_dial",
+        "busy_lamp_field",
         "phone_service_url",
         "trunk",
         "route_list",
@@ -412,12 +415,17 @@ class CUCMSourceAdapter(Adapter):
             self.job.logger.info(f"  RisPort returned {len(self._ip_map)} phones with IPs")
 
     def _enrich_lines(self, ps_name: str, sep_devices: list) -> None:
-        """Walk each SEP* phone via getPhone to pull lines, speed dials,
-        and service URLs. All three live in the same getPhone response, so
-        one call enriches all three button kinds at once."""
+        """Walk each SEP* phone via getPhone to pull all four button-type arrays.
+
+        getPhone returns the four button categories — lines, speed dials,
+        BLFs, and service URLs — as nested arrays in a single response,
+        so one call enriches all four at once. We also pull per-line
+        enrichment fields (max calls, busy trigger, MWI policy, etc.) from
+        lines.line[*] which aren't present in the bulk listPhone response.
+        """
         total = len(sep_devices)
         if self.job:
-            self.job.logger.info(f"Enriching {total} phones with line/speed-dial/service data (this may take several minutes)...")
+            self.job.logger.info(f"Enriching {total} phones with line/speed-dial/BLF/service data (this may take several minutes)...")
         for idx, (device_name, _) in enumerate(sep_devices):
             if self.job and idx and idx % 100 == 0:
                 self.job.logger.info(f"  Enriched {idx}/{total} phones...")
@@ -429,7 +437,7 @@ class CUCMSourceAdapter(Adapter):
                 continue
             if phone_obj is None:
                 continue
-            # Lines (DN appearances)
+            # Lines (DN appearances) — with per-line enrichment fields
             lines_container = _get(phone_obj, "lines")
             line_arr = _get(lines_container, "line", []) or []
             for line in line_arr:
@@ -439,6 +447,16 @@ class CUCMSourceAdapter(Adapter):
                 dn_pattern = _get(dirn, "pattern", "")
                 rp_ref = _get(dirn, "routePartitionName")
                 dn_partition_name = self._resolve_partition(rp_ref)
+
+                def _int_or_none(v):
+                    """Coerce '4' / 4 / '' / None → int or None."""
+                    if v in (None, "", 0, "0"):
+                        return None
+                    try:
+                        return int(v)
+                    except (TypeError, ValueError):
+                        return None
+
                 self.add(self.line(
                     phone__device_name=device_name,
                     phone__phone_system__name=ps_name,
@@ -447,6 +465,17 @@ class CUCMSourceAdapter(Adapter):
                     directory_number__partition__name=dn_partition_name,
                     label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
+                    # Per-line enrichment
+                    max_num_calls=_int_or_none(_get(line, "maxNumCalls")),
+                    busy_trigger=_int_or_none(_get(line, "busyTrigger")),
+                    mwl_policy=(_get(line, "mwlPolicy", "") or ""),
+                    audible_mwi=(_get(line, "audibleMwi", "") or ""),
+                    recording_flag=(_get(line, "recordingFlag", "") or ""),
+                    missed_call_logging=_axl_bool(_get(line, "missedCallLogging")),
+                    partition_usage=(_get(line, "partitionUsage", "") or ""),
+                    consecutive_ring_setting=(_get(line, "consecutiveRingSetting", "") or ""),
+                    ring_setting_idle_pickup_alert=(_get(line, "ringSettingIdlePickupAlert", "") or ""),
+                    ring_setting_active_pickup_alert=(_get(line, "ringSettingActivePickupAlert", "") or ""),
                 ))
             # Speed dials — `dirn` here is a plain string (the destination
             # number), unlike Line's `dirn` which is a complex DN reference.
@@ -463,17 +492,41 @@ class CUCMSourceAdapter(Adapter):
                     number=str(number),
                     label=_get(sd, "label", "") or "",
                 ))
+            # BLFs — speed-dial buttons with watched-destination presence indication.
+            # AXL field name on the BLF object is `blfDest` (the watched number);
+            # `index` is the button position; `asteriskService` indicates whether
+            # the BLF doubles as a * speed-dial.
+            blf_container = _get(phone_obj, "busyLampFields")
+            blf_arr = _get(blf_container, "busyLampField", []) or []
+            for blf in blf_arr:
+                dest = _get(blf, "blfDest", "") or ""
+                if not dest:
+                    continue
+                self.add(self.busy_lamp_field(
+                    phone__device_name=device_name,
+                    phone__phone_system__name=ps_name,
+                    button_index=int(_get(blf, "index", 0) or 0),
+                    destination=str(dest),
+                    label=_get(blf, "label", "") or "",
+                    asterisk_service=_axl_bool(_get(blf, "asteriskService")),
+                ))
             # Service URLs — XML services (Extension Mobility, custom apps).
+            # Some clusters configure multiple service URLs without setting
+            # `urlButtonIndex` (or set them all to 0 when the buttons aren't
+            # actually phone buttons but background services). Fall back to
+            # the array position so we don't collide on (phone, button_index).
             svc_container = _get(phone_obj, "services")
             svc_arr = _get(svc_container, "service", []) or []
-            for svc in svc_arr:
+            for pos, svc in enumerate(svc_arr):
                 url = _get(svc, "url", "") or ""
                 if not url:
                     continue
+                explicit_idx = _get(svc, "urlButtonIndex")
+                idx = int(explicit_idx) if explicit_idx not in (None, "", 0, "0") else pos
                 self.add(self.phone_service_url(
                     phone__device_name=device_name,
                     phone__phone_system__name=ps_name,
-                    button_index=int(_get(svc, "urlButtonIndex", 0) or 0),
+                    button_index=idx,
                     url=str(url),
                     label=_get(svc, "label", "") or "",
                 ))

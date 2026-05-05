@@ -76,6 +76,12 @@ class LineAPIViewSet(NautobotModelViewSet):
     filterset_class = None
 
 
+class BusyLampFieldAPIViewSet(NautobotModelViewSet):
+    queryset = models.BusyLampField.objects.all()
+    serializer_class = serializers.BusyLampFieldSerializer
+    filterset_class = None
+
+
 class TrunkAPIViewSet(NautobotModelViewSet):
     queryset = models.Trunk.objects.all()
     serializer_class = serializers.TrunkSerializer

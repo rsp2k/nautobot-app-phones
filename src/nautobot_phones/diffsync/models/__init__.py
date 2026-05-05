@@ -3,6 +3,7 @@
 from nautobot_phones.diffsync.models.base import (
     AnalogGatewayModel,
     AnalogPortModel,
+    BusyLampFieldModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DirectoryNumberModel,
@@ -22,6 +23,7 @@ from nautobot_phones.diffsync.models.base import (
 __all__ = [
     "AnalogGatewayModel",
     "AnalogPortModel",
+    "BusyLampFieldModel",
     "CSSPartitionMembershipModel",
     "CallingSearchSpaceModel",
     "DirectoryNumberModel",

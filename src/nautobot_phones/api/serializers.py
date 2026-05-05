@@ -79,6 +79,12 @@ class LineSerializer(NautobotModelSerializer):
         fields = "__all__"
 
 
+class BusyLampFieldSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.BusyLampField
+        fields = "__all__"
+
+
 class TrunkSerializer(NautobotModelSerializer):
     class Meta:
         model = models.Trunk
