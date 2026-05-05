@@ -18,6 +18,6 @@ RUN pip install --no-cache-dir nautobot-ssot==4.2.2
 # Source baked in for the editable install; bind-mount overlays src/ at runtime.
 COPY pyproject.toml /opt/plugin/
 COPY src /opt/plugin/src
-RUN pip install --no-cache-dir -e "/opt/plugin[dev]"
+RUN pip install --no-cache-dir -e "/opt/plugin[dev,cisco_ucm,freepbx]"
 
 USER nautobot
