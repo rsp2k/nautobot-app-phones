@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 
 from nautobot.apps.jobs import BooleanVar, ObjectVar, register_jobs
+from nautobot.dcim.models import Location
 from nautobot.extras.choices import SecretsGroupAccessTypeChoices, SecretsGroupSecretTypeChoices
 from nautobot_ssot.jobs.base import DataSource
 
@@ -59,6 +60,24 @@ class CUCMDataSource(DataSource):
         description=(
             "Pull live IP addresses + registration status via RisPort70. Single "
             "bulk call (paginated), typically a few seconds. Cheap; recommended."
+        ),
+    )
+    enrich_phone_devices = BooleanVar(
+        default=False,
+        description=(
+            "Auto-create Nautobot Device records for each Phone, with Manufacturer "
+            "(Cisco), DeviceType (from CCM model), and Network/PC/Voice Interfaces. "
+            "Lets you cable Phones to switch ports / patch panels. Phones with no "
+            "Location (and no fallback below) are skipped."
+        ),
+    )
+    default_phone_location = ObjectVar(
+        model=Location,
+        required=False,
+        description=(
+            "Fallback Location for auto-created Phone Devices when neither the "
+            "Phone record nor its PhoneSystem has one set. Skipped if blank and "
+            "no other Location is found."
         ),
     )
 
@@ -124,6 +143,25 @@ class CUCMDataSource(DataSource):
             include_lines=self.enrich_phone_lines,
         )
         self.target_adapter.load()
+
+    def execute_sync(self) -> None:
+        """After the standard DiffSync flow, optionally auto-create Devices."""
+        super().execute_sync()
+        if not self.enrich_phone_devices or self.dry_run:
+            return
+        from nautobot_phones.integrations.cisco_ucm.devices import enrich_phone_devices
+        result = enrich_phone_devices(
+            default_location=self.default_phone_location,
+            logger=self.logger,
+        )
+        self.logger.info(
+            "Phone-Device enrichment: created=%d, skipped_already_linked=%d, "
+            "skipped_no_location=%d, errored=%d",
+            result["created"],
+            result["skipped_already_linked"],
+            result["skipped_no_location"],
+            result["errored"],
+        )
 
 
 jobs = [CUCMDataSource]
