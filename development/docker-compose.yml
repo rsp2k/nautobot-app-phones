@@ -31,11 +31,16 @@ x-nautobot-common: &nautobot-common
     NAUTOBOT_SUPERUSER_PASSWORD: ${NAUTOBOT_SUPERUSER_PASSWORD}
     NAUTOBOT_SUPERUSER_API_TOKEN: ${NAUTOBOT_SUPERUSER_API_TOKEN}
     NAUTOBOT_CREATE_SUPERUSER: "true"
-    # Phone-system credential placeholders — wired in Phase 4/5 via SecretsGroup.
-    # Keeping them here so they're documented and grep-able.
-    CCM_LAB_HOST: ${CCM_LAB_HOST:-}
-    CCM_LAB_USER: ${CCM_LAB_USER:-}
-    CCM_LAB_PASSWORD: ${CCM_LAB_PASSWORD:-}
+    # Cisco UCM AXL credentials — read by Nautobot's environment-variable
+    # secrets provider via a SecretsGroup attached to the PhoneSystem record.
+    AXL_URL: ${AXL_URL:-}
+    AXL_USER: ${AXL_USER:-}
+    AXL_PASS: ${AXL_PASS:-}
+    # AXL WSDL location inside the container. Default: /opt/axl/<version>/AXLAPI.wsdl.
+    # Override AXL_WSDL_PATH to point elsewhere if you mount the WSDL differently.
+    AXL_VERSION: ${AXL_VERSION:-15.0}
+    AXL_WSDL_PATH: ${AXL_WSDL_PATH:-}
+    # FreePBX (Phase 5).
     FREEPBX_LAB_HOST: ${FREEPBX_LAB_HOST:-}
     FREEPBX_LAB_TOKEN: ${FREEPBX_LAB_TOKEN:-}
     PYTHONUNBUFFERED: "1"
@@ -44,10 +49,20 @@ x-nautobot-common: &nautobot-common
     - ./nautobot_config/nautobot_config.py:/opt/nautobot/nautobot_config.py:ro
     # Hot-reload our plugin source.
     - ../src:/opt/plugin/src
+    # AXL WSDL bundle — read-only. Layout matches AXLClient's default
+    # AXL_WSDL_ROOT/<version>/AXLAPI.wsdl resolution. Sourced from the
+    # lab/axl project's pre-extracted cache so we don't unzip per-stack.
+    - ${HOME}/.cache/mcaxl/wsdl:/opt/axl:ro
     # Persistent state.
     - nautobot-static:/opt/nautobot/static
     - nautobot-media:/opt/nautobot/media
     - nautobot-git-repos:/opt/nautobot/git
+  # Pin AXL hostname → BASTION_HOST IP so docker's internal DNS forwarder
+  # isn't on the critical path. Set AXL_HOST to the bare hostname (no
+  # scheme/port) and BASTION_HOST to the routable IP. Both must be set;
+  # docker-compose interpolation doesn't parse AXL_URL.
+  extra_hosts:
+    - "${AXL_HOST:-axl-host-unset.invalid}:${BASTION_HOST:-127.0.0.1}"
   depends_on:
     postgres:
       condition: service_healthy
