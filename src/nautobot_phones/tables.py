@@ -118,19 +118,36 @@ class DIDTable(BaseTable):
 
 
 class PhoneTable(BaseTable):
-    """List-view table for Phone."""
+    """List-view table for Phone.
+
+    `model` is a `@property` reading from `device.device_type.model`
+    (Nautobot DCIM is the source of truth for hardware identity), so we
+    expose it as a non-sortable accessor column rather than a sortable
+    ORM field. Operators wanting to sort/filter by hardware should
+    use the Devices list view directly.
+    """
 
     pk = ToggleColumn()
     device_name = tables.LinkColumn()
     mac_address = tables.Column()
+    model = tables.Column(accessor="model", verbose_name="Model", orderable=False)
     phone_system = tables.LinkColumn()
     location = tables.LinkColumn()
+    device_pool = tables.Column()
+    owner_user_id = tables.Column(verbose_name="Owner")
     actions = ButtonsColumn(models.Phone)
 
     class Meta(BaseTable.Meta):
         model = models.Phone
-        fields = ("pk", "device_name", "mac_address", "model", "description", "phone_system", "location", "registration_status", "last_registered_ip", "actions")
-        default_columns = ("pk", "device_name", "description", "mac_address", "model", "phone_system", "last_registered_ip", "actions")
+        fields = (
+            "pk", "device_name", "mac_address", "model", "description",
+            "phone_system", "location", "device_pool", "owner_user_id",
+            "registration_status", "last_registered_ip", "actions",
+        )
+        default_columns = (
+            "pk", "device_name", "description", "mac_address", "model",
+            "phone_system", "device_pool", "last_registered_ip", "actions",
+        )
 
 
 class TrunkTable(BaseTable):

@@ -107,15 +107,56 @@ class PhoneModel(NautobotModel):
     _model = models.Phone
     _modelname = "phone"
     _identifiers = ("mac_address", "phone_system__name")
-    _attributes = ("device_name", "model", "description", "registration_status", "last_registered_ip", "vendor_extras")
+    _attributes = (
+        "device_name", "description",
+        "registration_status", "last_registered_ip",
+        # Device Information
+        "device_pool", "common_phone_profile", "common_device_configuration",
+        "phone_button_template", "softkey_template",
+        "owner_user_id", "mobility_user_id",
+        "built_in_bridge", "privacy", "device_mobility_mode",
+        "always_use_prime_line", "always_use_prime_line_for_voice",
+        "user_locale", "network_locale", "aar_neighborhood",
+        "dnd_status", "dnd_option",
+        # Protocol Specific
+        "device_security_profile", "sip_profile", "rerouting_css", "subscribe_css",
+        "mtp_required", "packet_capture_mode",
+        # Vendor extras (carries axl_model used by post-sync device-creation)
+        "vendor_extras",
+    )
 
     mac_address: str
     phone_system__name: str
     device_name: str
-    model: str = ""
     description: str = ""
     registration_status: str = "unknown"
     last_registered_ip: Optional[str] = None
+    # Device Information
+    device_pool: str = ""
+    common_phone_profile: str = ""
+    common_device_configuration: str = ""
+    phone_button_template: str = ""
+    softkey_template: str = ""
+    owner_user_id: str = ""
+    mobility_user_id: str = ""
+    built_in_bridge: str = ""
+    privacy: str = ""
+    device_mobility_mode: str = ""
+    always_use_prime_line: str = ""
+    always_use_prime_line_for_voice: str = ""
+    user_locale: str = ""
+    network_locale: str = ""
+    aar_neighborhood: str = ""
+    dnd_status: bool = False
+    dnd_option: str = ""
+    # Protocol Specific
+    device_security_profile: str = ""
+    sip_profile: str = ""
+    rerouting_css: str = ""
+    subscribe_css: str = ""
+    mtp_required: bool = False
+    packet_capture_mode: str = ""
+    # Vendor extras
     vendor_extras: dict = {}
 
     @field_validator("mac_address", mode="before")

@@ -71,7 +71,7 @@ class PhoneFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.Phone
-        fields = ["device_name", "mac_address", "model", "phone_system", "location", "registration_status"]
+        fields = ["device_name", "mac_address", "phone_system", "location", "registration_status", "device_pool", "owner_user_id"]
 
 
 class TrunkFilterSet(NautobotFilterSet):

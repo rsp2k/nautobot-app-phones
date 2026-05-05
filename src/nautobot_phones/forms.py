@@ -164,14 +164,31 @@ class PhoneForm(NautobotModelForm):
 
     class Meta:
         model = models.Phone
-        fields = ("device_name", "mac_address", "model", "phone_system", "location", "device", "registration_status", "vendor_extras", "tags")
+        fields = (
+            # Identity
+            "device_name", "mac_address", "description", "phone_system", "location", "device",
+            "registration_status", "last_registered_ip",
+            # Device Information
+            "device_pool", "common_phone_profile", "common_device_configuration",
+            "phone_button_template", "softkey_template",
+            "owner_user_id", "mobility_user_id",
+            "built_in_bridge", "privacy", "device_mobility_mode",
+            "always_use_prime_line", "always_use_prime_line_for_voice",
+            "user_locale", "network_locale", "aar_neighborhood",
+            "dnd_status", "dnd_option",
+            # Protocol Specific Information
+            "device_security_profile", "sip_profile", "rerouting_css", "subscribe_css",
+            "mtp_required", "packet_capture_mode",
+            # Misc
+            "vendor_extras", "tags",
+        )
 
 
 class PhoneFilterForm(NautobotFilterForm):
     """Filter sidebar form for Phone list view."""
 
     model = models.Phone
-    field_order = ("q", "device_name", "mac_address", "model", "phone_system", "location", "registration_status")
+    field_order = ("q", "device_name", "mac_address", "phone_system", "location", "registration_status", "device_pool", "owner_user_id")
     q = forms.CharField(required=False, label="Search")
     registration_status = forms.MultipleChoiceField(choices=RegistrationStatusChoices, required=False)
 

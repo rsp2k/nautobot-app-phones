@@ -149,11 +149,45 @@ class AXLClient:
             "routePartitionName": _FK_TAG,
             "voiceMailProfileName": _FK_TAG,
         },
+        # listPhone exposes a wide subset of getPhone scalars — pulling them
+        # all up here means the cheap bulk sync gets full Device Info +
+        # Protocol Specific fidelity without paying for per-phone getPhone.
+        # Nested arrays (lines/speeddials/busyLampFields/services) still
+        # need getPhone — covered by the enrich_phone_lines flag.
         "listPhone": {
             "name": "",
             "description": "",
             "product": "",
             "model": "",
+            # NB: `currentRegistrationStatus` is NOT a valid listPhone tag —
+            # CCM tracks live registration server-side via RisPort70, not in
+            # the configuration store that AXL exposes. We get it from the
+            # RisPort70 status_map populated alongside the IP map.
+            # Device Information
+            "devicePoolName": _FK_TAG,
+            "commonPhoneConfigName": _FK_TAG,
+            "commonDeviceConfigName": _FK_TAG,
+            "phoneTemplateName": _FK_TAG,
+            "softkeyTemplateName": _FK_TAG,
+            "ownerUserName": _FK_TAG,
+            "mobilityUserIdName": _FK_TAG,
+            "builtInBridgeStatus": "",
+            "callInfoPrivacyStatus": "",
+            "deviceMobilityMode": "",
+            "alwaysUsePrimeLine": "",
+            "alwaysUsePrimeLineForVoiceMessage": "",
+            "userLocale": "",
+            "networkLocale": "",
+            "aarNeighborhoodName": _FK_TAG,
+            "dndStatus": "",
+            "dndOption": "",
+            # Protocol Specific Information
+            "securityProfileName": _FK_TAG,
+            "sipProfileName": _FK_TAG,
+            "rerouteCallingSearchSpaceName": _FK_TAG,  # NB: no '-ing' suffix in AXL
+            "subscribeCallingSearchSpaceName": _FK_TAG,
+            "mtpRequired": "",
+            "packetCaptureMode": "",
         },
         "listSipTrunk": {
             "name": "",

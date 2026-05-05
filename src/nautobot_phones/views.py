@@ -272,11 +272,40 @@ class PhoneUIViewSet(NautobotUIViewSet):
 
     object_detail_content = ObjectDetailContent(
         panels=(
+            # ---- Left column: identity + organizational metadata ----
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["device_name", "description", "mac_address", "model", "phone_system", "location", "device", "registration_status", "last_registered_ip"],
+                label="Phone",
+                fields=[
+                    "device_name", "description", "mac_address", "model",
+                    "phone_system", "location", "device",
+                    "registration_status", "last_registered_ip",
+                ],
                 value_transforms={"last_registered_ip": [_https_link]},
             ),
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=200,
+                label="Device Information",
+                fields=[
+                    "device_pool", "common_phone_profile", "common_device_configuration",
+                    "phone_button_template", "softkey_template",
+                    "owner_user_id", "mobility_user_id",
+                    "built_in_bridge", "privacy", "device_mobility_mode",
+                    "always_use_prime_line", "always_use_prime_line_for_voice",
+                    "user_locale", "network_locale", "aar_neighborhood",
+                    "dnd_status", "dnd_option",
+                ],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=300,
+                label="Protocol Specific Information",
+                fields=[
+                    "device_security_profile", "sip_profile",
+                    "rerouting_css", "subscribe_css",
+                    "mtp_required", "packet_capture_mode",
+                ],
+            ),
+            # ---- Right column: button configuration ----
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,
                 table_class=tables.LineTable, table_filter="phone",

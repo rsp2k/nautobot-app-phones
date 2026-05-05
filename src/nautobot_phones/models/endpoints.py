@@ -16,20 +16,28 @@ class Phone(PrimaryModel):
 
     Handles both regular IP phones (Cisco 8861, Yealink T54W, etc.) and ATAs
     (Cisco ATA-191, Grandstream HT-series). An ATA is just a Phone whose
-    `model` indicates it's an ATA — its FXS ports appear as Line rows.
+    underlying DeviceType indicates it's an ATA — its FXS ports appear as
+    Line rows.
+
+    Field grouping follows the CCM admin form's collapsible sections so
+    operators jumping between Nautobot and the CCM admin UI see the same
+    layout in both places: Device Information (organizational/policy fields)
+    and Protocol Specific Information (SIP/security/MTP/etc.).
+
+    `model` is intentionally NOT a stored field on Phone — it's a property
+    derived from `self.device.device_type.model`. This makes Nautobot's
+    DCIM the single source of truth for phone hardware identity. CCM tells
+    us the model string at sync time; we use it to find/create the
+    DeviceType, then read it back through the device link.
     """
 
+    # ---- Identity ------------------------------------------------------------
     device_name = models.CharField(
         max_length=100,
         help_text="Vendor-side device name (e.g. 'SEP001122334455' on CCM).",
     )
     mac_address = MACAddressCharField(
         help_text="Device MAC. Required by CCM; usually set on FreePBX devices too.",
-    )
-    model = models.CharField(
-        max_length=64,
-        blank=True,
-        help_text="Phone model string (e.g. 'CP-8851', 'ATA-191', 'T54W').",
     )
     description = models.CharField(
         max_length=200,
@@ -44,18 +52,14 @@ class Phone(PrimaryModel):
     location = models.ForeignKey(
         to="dcim.Location",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
+        null=True, blank=True, related_name="+",
         help_text="Where the phone physically lives.",
     )
     device = models.ForeignKey(
         to="dcim.Device",
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Optional link to a Nautobot Device record (for cable/port mapping).",
+        null=True, blank=True, related_name="+",
+        help_text="Link to a Nautobot Device record (carries DeviceType, cabling, IP, etc.).",
     )
     registration_status = models.CharField(
         max_length=32,
@@ -63,15 +67,74 @@ class Phone(PrimaryModel):
         default=RegistrationStatusChoices.UNKNOWN,
     )
     last_registered_ip = models.GenericIPAddressField(
-        null=True,
-        blank=True,
+        null=True, blank=True,
         verbose_name="Last Registered IP",
         help_text="IP address from the most recent RisPort70 registration record.",
     )
+
+    # ---- Device Information --------------------------------------------------
+    # CCM calls these "Device Pool", "Common Phone Profile", etc. We store
+    # them as the human-readable names (not FKs) since they're CCM-side
+    # organizational concepts that don't map cleanly to Nautobot models.
+    device_pool = models.CharField(
+        max_length=100, blank=True,
+        help_text="CCM Device Pool — groups phones with shared SRST/MRGL/region/date-time.",
+    )
+    common_phone_profile = models.CharField(max_length=100, blank=True)
+    common_device_configuration = models.CharField(max_length=100, blank=True)
+    phone_button_template = models.CharField(max_length=100, blank=True)
+    softkey_template = models.CharField(max_length=100, blank=True)
+    owner_user_id = models.CharField(
+        max_length=100, blank=True,
+        help_text="CCM end-user assigned as the phone owner.",
+    )
+    mobility_user_id = models.CharField(max_length=100, blank=True)
+    built_in_bridge = models.CharField(
+        max_length=16, blank=True,
+        help_text='Tri-state: "Default", "On", "Off".',
+    )
+    privacy = models.CharField(
+        max_length=16, blank=True,
+        help_text='Tri-state: "Default", "On", "Off".',
+    )
+    device_mobility_mode = models.CharField(max_length=16, blank=True)
+    always_use_prime_line = models.CharField(max_length=16, blank=True)
+    always_use_prime_line_for_voice = models.CharField(max_length=16, blank=True)
+    user_locale = models.CharField(max_length=64, blank=True)
+    network_locale = models.CharField(max_length=64, blank=True)
+    aar_neighborhood = models.CharField(max_length=100, blank=True)
+
+    # ---- DND (Do Not Disturb) ------------------------------------------------
+    dnd_status = models.BooleanField(
+        default=False,
+        help_text="DND on/off (the phone-wide setting, not per-line).",
+    )
+    dnd_option = models.CharField(
+        max_length=32, blank=True,
+        help_text='"None", "Ringer Off", or "Call Reject".',
+    )
+
+    # ---- Protocol Specific Information ---------------------------------------
+    device_security_profile = models.CharField(max_length=100, blank=True)
+    sip_profile = models.CharField(max_length=100, blank=True)
+    rerouting_css = models.CharField(
+        max_length=100, blank=True, verbose_name="Rerouting CSS",
+        help_text="CSS used when SIP REFER reroutes calls.",
+    )
+    subscribe_css = models.CharField(
+        max_length=100, blank=True, verbose_name="SUBSCRIBE CSS",
+        help_text="CSS used for SIP SUBSCRIBE messages.",
+    )
+    mtp_required = models.BooleanField(
+        default=False, verbose_name="MTP Required",
+        help_text="Force a Media Termination Point in every call path.",
+    )
+    packet_capture_mode = models.CharField(max_length=32, blank=True)
+
+    # ---- Vendor extras -------------------------------------------------------
     vendor_extras = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Vendor-specific fields not modeled as columns.",
+        default=dict, blank=True,
+        help_text="Long-tail CCM fields + axl_model (used by device-creation pass).",
     )
 
     natural_key_field_names = ["phone_system", "mac_address"]
@@ -85,6 +148,20 @@ class Phone(PrimaryModel):
     def __str__(self) -> str:
         """Display string."""
         return f"{self.device_name} ({self.mac_address})"
+
+    @property
+    def model(self) -> str:
+        """Read the phone's model from the linked Device's DeviceType.
+
+        This makes Nautobot's DCIM the source of truth for hardware
+        identity. Falls back to vendor_extras['axl_model'] (set by the
+        adapter at sync time) for phones that haven't been linked to a
+        Device yet — typically because the device-creation pass was
+        skipped or hadn't run yet for this phone.
+        """
+        if self.device_id and self.device.device_type:
+            return self.device.device_type.model or ""
+        return self.vendor_extras.get("axl_model", "") if isinstance(self.vendor_extras, dict) else ""
 
 
 class Line(BaseModel):

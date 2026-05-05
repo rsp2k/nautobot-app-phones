@@ -293,15 +293,68 @@ class CUCMSourceAdapter(Adapter):
             sep_devices.append((device_name, phone_row))
 
             ip = self._ip_map.get(device_name) or None
+            # FK fields (Device Pool, CSS, security/SIP profiles, etc.) come
+            # back as {_value_1: "Name", uuid: "..."}. Resolve to plain names.
+            def _fk_name(field_name):
+                ref = _get(phone_row, field_name)
+                if not ref:
+                    return ""
+                v = _get(ref, "_value_1", "") or ""
+                # CCM uses the literal string "None" for empty FKs — treat as blank
+                return "" if v == "None" else v
+
+            axl_model = _get(phone_row, "model", "") or ""
+            extras = _extract_extras(phone_row, exclude={
+                "name", "description", "currentRegistrationStatus",
+                "model",  # excluded — re-added explicitly below as axl_model so
+                          # the device-creation pass can find/create the right DeviceType
+                "devicePoolName", "commonPhoneConfigName", "commonDeviceConfigName",
+                "phoneTemplateName", "softkeyTemplateName",
+                "ownerUserName", "mobilityUserIdName",
+                "builtInBridgeStatus", "callInfoPrivacyStatus", "deviceMobilityMode",
+                "alwaysUsePrimeLine", "alwaysUsePrimeLineForVoiceMessage",
+                "userLocale", "networkLocale", "aarNeighborhoodName",
+                "dndStatus", "dndOption",
+                "securityProfileName", "sipProfileName",
+                "rerouteCallingSearchSpaceName", "subscribeCallingSearchSpaceName",
+                "mtpRequired", "packetCaptureMode",
+            })
+            extras["axl_model"] = axl_model  # stash for post-sync device-creation
+
             self.add(self.phone(
                 mac_address=mac_formatted,
                 phone_system__name=ps_name,
                 device_name=device_name,
-                model=_get(phone_row, "model", "") or "",
                 description=_get(phone_row, "description", "") or "",
                 registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
                 last_registered_ip=ip,
-                vendor_extras=_extract_extras(phone_row, exclude={"name", "model", "description", "currentRegistrationStatus"}),
+                # Device Information
+                device_pool=_fk_name("devicePoolName"),
+                common_phone_profile=_fk_name("commonPhoneConfigName"),
+                common_device_configuration=_fk_name("commonDeviceConfigName"),
+                phone_button_template=_fk_name("phoneTemplateName"),
+                softkey_template=_fk_name("softkeyTemplateName"),
+                owner_user_id=_fk_name("ownerUserName"),
+                mobility_user_id=_fk_name("mobilityUserIdName"),
+                built_in_bridge=(_get(phone_row, "builtInBridgeStatus", "") or ""),
+                privacy=(_get(phone_row, "callInfoPrivacyStatus", "") or ""),
+                device_mobility_mode=(_get(phone_row, "deviceMobilityMode", "") or ""),
+                always_use_prime_line=(_get(phone_row, "alwaysUsePrimeLine", "") or ""),
+                always_use_prime_line_for_voice=(_get(phone_row, "alwaysUsePrimeLineForVoiceMessage", "") or ""),
+                user_locale=(_get(phone_row, "userLocale", "") or ""),
+                network_locale=(_get(phone_row, "networkLocale", "") or ""),
+                aar_neighborhood=_fk_name("aarNeighborhoodName"),
+                dnd_status=_axl_bool(_get(phone_row, "dndStatus")),
+                dnd_option=(_get(phone_row, "dndOption", "") or ""),
+                # Protocol Specific Information
+                device_security_profile=_fk_name("securityProfileName"),
+                sip_profile=_fk_name("sipProfileName"),
+                rerouting_css=_fk_name("rerouteCallingSearchSpaceName"),
+                subscribe_css=_fk_name("subscribeCallingSearchSpaceName"),
+                mtp_required=_axl_bool(_get(phone_row, "mtpRequired")),
+                packet_capture_mode=(_get(phone_row, "packetCaptureMode", "") or ""),
+                # Long-tail
+                vendor_extras=extras,
             ))
 
             # Lines are nested children of the phone.

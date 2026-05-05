@@ -90,7 +90,12 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
             continue
 
         try:
-            device_type = _ensure_device_type(cisco, phone.model or "Unknown Cisco Phone")
+            # `axl_model` is stashed in vendor_extras by the adapter at sync
+            # time — Phone.model itself was removed (Nautobot DCIM is the
+            # source of truth for hardware identity, and DeviceType.model
+            # is what we'll read back through the @property).
+            axl_model = (phone.vendor_extras or {}).get("axl_model", "") or "Unknown Cisco Phone"
+            device_type = _ensure_device_type(cisco, axl_model)
             device = Device.objects.create(
                 name=phone.device_name,
                 device_type=device_type,
@@ -99,7 +104,7 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
                 location=location,
                 serial=str(phone.mac_address).upper() if phone.mac_address else "",
             )
-            voice_iface, network_iface = _create_phone_interfaces(device, phone.model or "")
+            voice_iface, network_iface = _create_phone_interfaces(device, axl_model)
             # Assign Phone.last_registered_ip to Voice (preferred) or Network
             # interface, and set as the Device's primary IPv4 so it shows up
             # in the standard Device list view and SNMP-discovery flows.
