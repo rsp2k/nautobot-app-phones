@@ -94,18 +94,24 @@ class CUCMSourceAdapter(Adapter):
     # something concrete to point partition-less DNs/patterns at.
     NULL_PARTITION_NAME = "(none)"
 
-    def __init__(self, *args, client, phone_system_record, job=None, **kwargs):
+    def __init__(self, *args, client, phone_system_record, job=None, enrich_phone_lines=False, **kwargs):
         """Take a configured AXLClient and the PhoneSystem record it belongs to.
 
         `phone_system_record` is the Nautobot PhoneSystem ORM instance —
         we need its name + version for the synthetic phone_system DiffSync
         record we emit (CUCM doesn't have a "phone system" object; the
         cluster IS the system).
+
+        `enrich_phone_lines` enables per-phone getPhone calls to populate
+        the Line records (button index, DN reference, label). Off by
+        default since it's slow — ~200-400ms per phone. For 1000+ phones
+        this adds 5-10 minutes to the sync.
         """
         super().__init__(*args, **kwargs)
         self.client = client
         self.phone_system_record = phone_system_record
         self.job = job
+        self.enrich_phone_lines = enrich_phone_lines
 
     def _resolve_partition(self, ref: Any) -> str:
         """Pull the partition name out of a routePartitionName ref.
@@ -186,6 +192,7 @@ class CUCMSourceAdapter(Adapter):
 
     def _load_phones_and_lines(self, ps_name: str) -> None:
         skipped_non_sep = 0
+        sep_devices: list[tuple[str, Any]] = []  # (device_name, listPhone-row) for enrichment phase
         for phone_row in self.client.list_phones():
             device_name = _get(phone_row, "name", "") or ""
 
@@ -199,6 +206,7 @@ class CUCMSourceAdapter(Adapter):
                 continue
             mac = device_name.removeprefix("SEP").lower()
             mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
+            sep_devices.append((device_name, phone_row))
 
             self.add(self.phone(
                 mac_address=mac_formatted,
@@ -230,6 +238,46 @@ class CUCMSourceAdapter(Adapter):
 
         if skipped_non_sep and self.job:
             self.job.logger.info(f"Skipped {skipped_non_sep} non-SEP phone records (softphones/CTI ports)")
+
+        # Optional second-phase: per-phone getPhone to populate line membership.
+        # Slow — ~200-400ms per call, so this is off by default.
+        if self.enrich_phone_lines:
+            self._enrich_lines(ps_name, sep_devices)
+
+    def _enrich_lines(self, ps_name: str, sep_devices: list) -> None:
+        """Walk each SEP* phone via getPhone to pull its lines + DN refs."""
+        total = len(sep_devices)
+        if self.job:
+            self.job.logger.info(f"Enriching {total} phones with line data (this may take several minutes)...")
+        for idx, (device_name, _) in enumerate(sep_devices):
+            if self.job and idx and idx % 100 == 0:
+                self.job.logger.info(f"  Enriched {idx}/{total} phones...")
+            try:
+                phone_obj = self.client.get_phone(device_name)
+            except Exception as e:  # noqa: BLE001 — log + skip; one bad record shouldn't kill the sync
+                if self.job:
+                    self.job.logger.warning(f"  getPhone({device_name!r}) failed: {type(e).__name__}: {e}")
+                continue
+            if phone_obj is None:
+                continue
+            lines_container = _get(phone_obj, "lines")
+            line_arr = _get(lines_container, "line", []) or []
+            for line in line_arr:
+                dirn = _get(line, "dirn")
+                if dirn is None:
+                    continue
+                dn_pattern = _get(dirn, "pattern", "")
+                rp_ref = _get(dirn, "routePartitionName")
+                dn_partition_name = self._resolve_partition(rp_ref)
+                self.add(self.line(
+                    phone__device_name=device_name,
+                    phone__phone_system__name=ps_name,
+                    button_index=int(_get(line, "index", 0) or 0),
+                    directory_number__extension=dn_pattern,
+                    directory_number__partition__name=dn_partition_name,
+                    label=_get(line, "label", "") or "",
+                    ring_setting=_get(line, "ringSetting", "") or "",
+                ))
 
     def _load_route_lists(self, ps_name: str) -> None:
         for row in self.client.list_route_lists():

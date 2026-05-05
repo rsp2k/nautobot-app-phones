@@ -46,6 +46,13 @@ class CUCMDataSource(DataSource):
         default=True,
         description="Verify the publisher's TLS certificate (disable for self-signed dev clusters).",
     )
+    enrich_phone_lines = BooleanVar(
+        default=False,
+        description=(
+            "Pull per-phone line membership via getPhone. Slow — adds ~200-400ms "
+            "per phone (5-10 min for 1000+ phones). Off by default."
+        ),
+    )
 
     class Meta:
         """Job metadata."""
@@ -86,6 +93,7 @@ class CUCMDataSource(DataSource):
             phone_system_record=ps,
             job=self,
             sync=self.sync,
+            enrich_phone_lines=self.enrich_phone_lines,
         )
         self.source_adapter.load()
 

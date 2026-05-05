@@ -220,6 +220,25 @@ class AXLClient:
         """`listRouteGroup` — Route Groups."""
         return self._list("listRouteGroup", "routeGroup", **overrides)
 
+    # -- Per-record getX methods ---------------------------------------------
+    #
+    # AXL list operations return scalar fields only. Complex/nested data
+    # (phone-button line membership, route-group members, full SIP trunk
+    # destinations, etc.) requires per-record getX. Slow for bulk —
+    # ~200-400ms per call.
+
+    def get_phone(self, name: str) -> Any:
+        """`getPhone` — full phone record including the nested `lines` array.
+
+        Returns the inner phone object (already unwrapped from the SOAP
+        envelope). Caller checks for None on missing fields via getattr.
+        """
+        result = self._service.getPhone(name=name)
+        # zeep wraps the SOAP `return` element. `return` is a Python keyword
+        # so attribute access requires getattr.
+        return_obj = getattr(result, "return")
+        return getattr(return_obj, "phone", None) if return_obj is not None else None
+
     def _list(
         self,
         operation: str,
