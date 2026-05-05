@@ -110,6 +110,7 @@ class PhoneModel(NautobotModel):
     _attributes = (
         "device_name", "description",
         "registration_status", "last_registered_ip",
+        "ccm_location", "network_location",
         # Device Information
         "device_pool", "common_phone_profile", "common_device_configuration",
         "phone_button_template", "softkey_template",
@@ -131,6 +132,8 @@ class PhoneModel(NautobotModel):
     description: str = ""
     registration_status: str = "unknown"
     last_registered_ip: Optional[str] = None
+    ccm_location: str = ""
+    network_location: str = ""
     # Device Information
     device_pool: str = ""
     common_phone_profile: str = ""

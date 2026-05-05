@@ -308,6 +308,7 @@ class CUCMSourceAdapter(Adapter):
                 "name", "description", "currentRegistrationStatus",
                 "model",  # excluded — re-added explicitly below as axl_model so
                           # the device-creation pass can find/create the right DeviceType
+                "locationName", "networkLocation",
                 "devicePoolName", "commonPhoneConfigName", "commonDeviceConfigName",
                 "phoneTemplateName", "softkeyTemplateName",
                 "ownerUserName", "mobilityUserIdName",
@@ -328,6 +329,9 @@ class CUCMSourceAdapter(Adapter):
                 description=_get(phone_row, "description", "") or "",
                 registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
                 last_registered_ip=ip,
+                # CCM Location (Call Admission Control) + Network Location
+                ccm_location=_fk_name("locationName"),
+                network_location=(_get(phone_row, "networkLocation", "") or ""),
                 # Device Information
                 device_pool=_fk_name("devicePoolName"),
                 common_phone_profile=_fk_name("commonPhoneConfigName"),

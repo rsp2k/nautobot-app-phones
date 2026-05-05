@@ -49,11 +49,19 @@ class Phone(PrimaryModel):
         on_delete=models.CASCADE,
         related_name="phones",
     )
-    location = models.ForeignKey(
-        to="dcim.Location",
-        on_delete=models.PROTECT,
-        null=True, blank=True, related_name="+",
-        help_text="Where the phone physically lives.",
+    # NB: physical location lives on the linked Device (Nautobot DCIM is the
+    # authority for floor/closet/rack). The Phone exposes `location` as a
+    # @property below that reads `self.device.location`. This avoids storing
+    # the same fact in two places.
+    ccm_location = models.CharField(
+        max_length=100, blank=True,
+        verbose_name="CCM Location",
+        help_text="CCM Location (Call Admission Control / bandwidth zone), e.g. 'Hub_None', 'Branch_512K'. "
+                  "Distinct from physical location — that's tracked on the linked Device.",
+    )
+    network_location = models.CharField(
+        max_length=32, blank=True,
+        help_text='CCM Network Location: "Use System Default", "On Net", "Off Net".',
     )
     device = models.ForeignKey(
         to="dcim.Device",
@@ -148,6 +156,19 @@ class Phone(PrimaryModel):
     def __str__(self) -> str:
         """Display string."""
         return f"{self.device_name} ({self.mac_address})"
+
+    @property
+    def location(self):
+        """Read the phone's physical location from the linked Device.
+
+        Nautobot DCIM is the authority for physical placement (floor,
+        closet, rack). The Phone-level `location` was historically a
+        dcim.Location FK but conflated the CCM concept of "Location"
+        (Call Admission Control / bandwidth class) with physical
+        placement. We split them: ccm_location is now a CharField on
+        Phone, physical placement reads from `self.device.location`.
+        """
+        return self.device.location if self.device_id else None
 
     @property
     def model(self) -> str:

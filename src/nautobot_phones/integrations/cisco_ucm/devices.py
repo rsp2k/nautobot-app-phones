@@ -79,12 +79,16 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
     skipped_already_linked = 0
     errored = 0
 
-    for phone in Phone.objects.select_related("device", "location", "phone_system__location"):
+    for phone in Phone.objects.select_related("device", "phone_system__location"):
         if phone.device_id is not None:
             skipped_already_linked += 1
             continue
 
-        location = phone.location or phone.phone_system.location or default_location
+        # Phone.location was removed (it was a dcim.Location FK that got
+        # confused with CCM's "Location" CAC concept). Physical placement
+        # now flows through PhoneSystem.location → Device.location → and
+        # then back through Phone.location's @property accessor.
+        location = phone.phone_system.location or default_location
         if location is None:
             skipped_no_location += 1
             continue

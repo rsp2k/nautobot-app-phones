@@ -130,10 +130,17 @@ class PhoneTable(BaseTable):
     pk = ToggleColumn()
     device_name = tables.LinkColumn()
     mac_address = tables.Column()
+    # `model` and `physical_location` are @property accessors on Phone (read
+    # through device.device_type.model and device.location). Non-sortable
+    # since they're not real DB columns — operators wanting to sort/filter
+    # by hardware should use the Devices list view directly.
     model = tables.Column(accessor="model", verbose_name="Model", orderable=False)
+    physical_location = tables.Column(
+        accessor="location", verbose_name="Physical Location", orderable=False,
+    )
     phone_system = tables.LinkColumn()
-    location = tables.LinkColumn()
     device_pool = tables.Column()
+    ccm_location = tables.Column(verbose_name="CCM Location")
     owner_user_id = tables.Column(verbose_name="Owner")
     actions = ButtonsColumn(models.Phone)
 
@@ -141,12 +148,14 @@ class PhoneTable(BaseTable):
         model = models.Phone
         fields = (
             "pk", "device_name", "mac_address", "model", "description",
-            "phone_system", "location", "device_pool", "owner_user_id",
+            "phone_system", "physical_location", "ccm_location",
+            "device_pool", "owner_user_id",
             "registration_status", "last_registered_ip", "actions",
         )
         default_columns = (
             "pk", "device_name", "description", "mac_address", "model",
-            "phone_system", "device_pool", "last_registered_ip", "actions",
+            "phone_system", "ccm_location", "device_pool",
+            "last_registered_ip", "actions",
         )
 
 

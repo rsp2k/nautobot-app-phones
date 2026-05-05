@@ -278,9 +278,11 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 label="Phone",
                 fields=[
                     "device_name", "description", "mac_address", "model",
-                    "phone_system", "location", "device",
+                    "phone_system", "device", "location",  # `location` is a @property reading device.location
+                    "ccm_location", "network_location",
                     "registration_status", "last_registered_ip",
                 ],
+                key_transforms={"location": "Physical Location (from Device)"},
                 value_transforms={"last_registered_ip": [_https_link]},
             ),
             ObjectFieldsPanel(

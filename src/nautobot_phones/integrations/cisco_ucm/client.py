@@ -163,6 +163,9 @@ class AXLClient:
             # CCM tracks live registration server-side via RisPort70, not in
             # the configuration store that AXL exposes. We get it from the
             # RisPort70 status_map populated alongside the IP map.
+            # CCM Location (CAC/bandwidth) + Network Location
+            "locationName": _FK_TAG,
+            "networkLocation": "",
             # Device Information
             "devicePoolName": _FK_TAG,
             "commonPhoneConfigName": _FK_TAG,
