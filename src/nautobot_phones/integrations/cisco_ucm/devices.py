@@ -403,6 +403,38 @@ def _decode_voice_port_name(port_index: int) -> str:
     return f"voice-port {slot}/{sub_slot}/{port}"
 
 
+def _voice_port_metadata(subunit_product: str) -> tuple[str, str]:
+    """Map a Cisco voice-module product string to (function, connector).
+
+    Function detection by name (FXS/FXO substrings). Connector detection
+    by density-implied form-factor:
+      - SM-X / SM-* with high port count → RJ-21 (50-pin Amphenol)
+      - NIM-* with low port count        → RJ-11 (individual jacks)
+
+    Defaults to ``fxs / rj-21`` (the SM-X-72FXS-SCCP case in our test fleet)
+    when the subunit product is unknown — operators can override per-port
+    via the Interface custom-field UI.
+    """
+    p = (subunit_product or "").upper()
+    if "FXO" in p and "FXS" not in p:
+        function = "fxo"
+    elif "FXS" in p and "FXO" in p:
+        # Mixed module — default to fxs (most common port type on these
+        # cards); per-port override is the operator's responsibility.
+        function = "fxs"
+    else:
+        function = "fxs"
+
+    high_density = any(d in p for d in ("24FXS", "48FXS", "72FXS", "24FXO", "48FXO"))
+    if high_density or "SM-X" in p or "SM-" in p:
+        connector = "rj-21"
+    elif "NIM" in p:
+        connector = "rj-11"
+    else:
+        connector = "rj-21"
+    return function, connector
+
+
 def enrich_analog_gateway_interfaces(*, logger=None) -> dict:
     """For each linked AnalogGateway, materialize FXS Interfaces on the Device.
 
@@ -425,9 +457,30 @@ def enrich_analog_gateway_interfaces(*, logger=None) -> dict:
         if gw.device_id is None:
             skipped_no_device += 1
             continue
+        # Build subunit-product lookup keyed by (unit_index, subunit_index)
+        # — captured during gateway sync into vendor_extras.module_units.
+        # Each port's bit-decode tells us which (unit, subunit) it lives on,
+        # so we can populate function + connector custom fields per port.
+        subunit_products: dict[tuple[int, int], str] = {}
+        for unit_info in (gw.vendor_extras or {}).get("module_units", []) or []:
+            ui = unit_info.get("unit_index")
+            si = unit_info.get("subunit_index")
+            sp = unit_info.get("subunit_product") or ""
+            if ui is not None and si is not None:
+                subunit_products[(int(ui), int(si))] = sp
+
         for port in gw.ports.select_related("directory_number__partition"):
             iface_name = _decode_voice_port_name(port.port_index)
-            description_bits = [f"FXS port (CCM index 0x{port.port_index:X} = {port.port_index})"]
+            # Decode slot/sub_slot for module lookup. Same bit layout as
+            # the IOS-name decoder.
+            slot = (port.port_index >> 9) & 0x07
+            sub_slot = (port.port_index >> 8) & 0x01
+            subunit_product = subunit_products.get((slot, sub_slot), "")
+            voice_fn, phys_conn = _voice_port_metadata(subunit_product)
+
+            description_bits = [f"{voice_fn.upper()} port (CCM index 0x{port.port_index:X} = {port.port_index})"]
+            if subunit_product:
+                description_bits.append(f"on {subunit_product}")
             if port.directory_number_id:
                 dn = port.directory_number
                 description_bits.append(f"DN {dn.partition.name}/{dn.extension}")
@@ -438,14 +491,25 @@ def enrich_analog_gateway_interfaces(*, logger=None) -> dict:
                     device=gw.device,
                     name=iface_name,
                     defaults={
-                        "type": InterfaceTypeChoices.TYPE_OTHER,  # FXS isn't an Ethernet type
+                        "type": InterfaceTypeChoices.TYPE_OTHER,  # FXS/FXO isn't a core type
                         "status": active_iface_status,
                         "description": description,
                     },
                 )
+                # Populate custom fields. ``_custom_field_data`` is the
+                # canonical write surface for CustomField values on
+                # Nautobot models — round-trips through validation.
+                desired_cf = {"voice_function": voice_fn, "physical_connector": phys_conn}
+                cf_changed = any(
+                    iface._custom_field_data.get(k) != v for k, v in desired_cf.items()
+                )
+                desc_changed = iface.description != description
                 if was_created:
+                    iface._custom_field_data.update(desired_cf)
+                    iface.save()
                     created += 1
-                elif iface.description != description:
+                elif cf_changed or desc_changed:
+                    iface._custom_field_data.update(desired_cf)
                     iface.description = description
                     iface.save()
                     updated += 1
