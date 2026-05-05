@@ -115,7 +115,14 @@ class CUCMDataSource(DataSource):
 
     def load_target_adapter(self) -> None:
         """Build the Nautobot-side adapter."""
-        self.target_adapter = PhonesNautobotAdapter(job=self, sync=self.sync)
+        # Pair with source adapter's enrich_phone_lines flag — both must
+        # agree on whether Line participates in the diff, otherwise dest
+        # records get orphan-deleted when source isn't enriching.
+        self.target_adapter = PhonesNautobotAdapter(
+            job=self,
+            sync=self.sync,
+            include_lines=self.enrich_phone_lines,
+        )
         self.target_adapter.load()
 
 

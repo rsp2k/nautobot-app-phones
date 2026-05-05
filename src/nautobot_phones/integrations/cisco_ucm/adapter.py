@@ -130,6 +130,11 @@ class CUCMSourceAdapter(Adapter):
         # Populated by _fetch_ris_data when enrich_phone_ip=True; map of
         # CUCM device-name (e.g. "SEPCAFEBABE0001") to IP address string.
         self._ip_map: dict[str, str] = {}
+        # When enrich_phone_lines is off, exclude `line` from the diff so
+        # existing Line records in Nautobot aren't wiped by the sync. The
+        # Job pairs this with the same exclusion on the destination adapter.
+        if not enrich_phone_lines:
+            self.top_level = tuple(t for t in self.top_level if t != "line")
 
     def _resolve_partition(self, ref: Any) -> str:
         """Pull the partition name out of a routePartitionName ref.

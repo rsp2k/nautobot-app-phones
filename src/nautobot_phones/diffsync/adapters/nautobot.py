@@ -67,3 +67,16 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "analog_gateway",
         "analog_port",
     )
+
+    def __init__(self, *args, include_lines=True, **kwargs):
+        """`include_lines=False` excludes Line from the diff entirely.
+
+        Pair with the source adapter's `enrich_phone_lines=False` to leave
+        existing Line records in Nautobot alone when the sync isn't doing
+        the slow per-phone getPhone enrichment. Both adapters need to
+        agree, otherwise DiffSync sees an empty source vs populated dest
+        and tries to delete the orphans.
+        """
+        super().__init__(*args, **kwargs)
+        if not include_lines:
+            self.top_level = tuple(t for t in self.top_level if t != "line")
