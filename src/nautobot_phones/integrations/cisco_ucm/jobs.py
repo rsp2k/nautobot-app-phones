@@ -151,6 +151,7 @@ class CUCMDataSource(DataSource):
             return
         from nautobot_phones.integrations.cisco_ucm.devices import (
             enrich_analog_gateway_devices,
+            enrich_analog_gateway_interfaces,
             enrich_phone_devices,
         )
         # Phase 1: phones → DCIM Devices (auto-creates, since each Phone is
@@ -178,6 +179,18 @@ class CUCMDataSource(DataSource):
             gw_result["matched_unique_dt"],
             gw_result["skipped_already_linked"],
             gw_result["unmatched"],
+        )
+        # Phase 3: materialize FXS Interfaces on each linked Device, named
+        # in Cisco IOS voice-port convention so DCIM cabling and the
+        # gateway's running-config use the same identifiers.
+        if_result = enrich_analog_gateway_interfaces(logger=self.logger)
+        self.logger.info(
+            "AnalogGateway-Interface materialization: created=%d, updated=%d, "
+            "skipped_no_device=%d, errored=%d",
+            if_result["created"],
+            if_result["updated"],
+            if_result["skipped_no_device"],
+            if_result["errored"],
         )
 
 

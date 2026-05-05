@@ -375,3 +375,87 @@ def _extract_chassis_mac_base(ccm_name: str) -> str:
         return base
     except ValueError:
         return ""
+
+
+def _decode_voice_port_name(port_index: int) -> str:
+    """Decode CCM AN4 port encoding into Cisco IOS voice-port slot/subslot/port.
+
+    Empirical decoding from the Lab VG450 audit
+    (~/lab/docs/dist/audits/2026-04-27-vg450-rejected-endpoints):
+
+        bits 9-11  → slot
+        bit 8      → sub-slot
+        bits 0-7   → port number (1-based; IOS displays as port-1)
+
+    Examples (audit-verified):
+        0x20A (522)  → voice-port 1/0/9
+        0x638 (1592) → voice-port 3/0/55
+        0x201 (513)  → voice-port 1/0/0
+    """
+    slot = (port_index >> 9) & 0x07
+    sub_slot = (port_index >> 8) & 0x01
+    port_1based = port_index & 0xFF
+    port = port_1based - 1
+    if port < 0:
+        # Encoding boundary case — fall back to a stable raw-hex name
+        # so the Interface still gets created with a unique, decodable label.
+        return f"FXS-0x{port_index:X}"
+    return f"voice-port {slot}/{sub_slot}/{port}"
+
+
+def enrich_analog_gateway_interfaces(*, logger=None) -> dict:
+    """For each linked AnalogGateway, materialize FXS Interfaces on the Device.
+
+    Walks the gateway's AnalogPort records and creates one Interface per
+    port on the linked dcim.Device. Each Interface is named in Cisco IOS
+    voice-port convention (`voice-port 1/0/0` etc.) so operators jumping
+    between Nautobot DCIM and the gateway's running-config see the same
+    identifiers in both places. Description carries the bound DN when
+    one exists, making "what extension does this port serve?" answerable
+    from the DCIM view.
+
+    Idempotent: re-running adds nothing (get_or_create on name).
+    Skips gateways that aren't linked to a Device yet.
+    """
+    log = (logger.info if logger else print)
+    created = updated = skipped_no_device = errored = 0
+    active_iface_status = Status.objects.get_for_model(Interface).get(name="Active")
+
+    for gw in AnalogGateway.objects.select_related("device"):
+        if gw.device_id is None:
+            skipped_no_device += 1
+            continue
+        for port in gw.ports.select_related("directory_number__partition"):
+            iface_name = _decode_voice_port_name(port.port_index)
+            description_bits = [f"FXS port (CCM index 0x{port.port_index:X} = {port.port_index})"]
+            if port.directory_number_id:
+                dn = port.directory_number
+                description_bits.append(f"DN {dn.partition.name}/{dn.extension}")
+            description = " — ".join(description_bits)
+
+            try:
+                iface, was_created = Interface.objects.get_or_create(
+                    device=gw.device,
+                    name=iface_name,
+                    defaults={
+                        "type": InterfaceTypeChoices.TYPE_OTHER,  # FXS isn't an Ethernet type
+                        "status": active_iface_status,
+                        "description": description,
+                    },
+                )
+                if was_created:
+                    created += 1
+                elif iface.description != description:
+                    iface.description = description
+                    iface.save()
+                    updated += 1
+            except Exception as exc:  # noqa: BLE001
+                log(f"  Failed to create Interface for {gw.name} port {port.port_index}: {exc}")
+                errored += 1
+
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped_no_device": skipped_no_device,
+        "errored": errored,
+    }
