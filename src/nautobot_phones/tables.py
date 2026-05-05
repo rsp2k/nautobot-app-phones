@@ -74,7 +74,7 @@ class DirectoryNumberTable(BaseTable):
     """List-view table for DirectoryNumber."""
 
     pk = ToggleColumn()
-    extension = tables.LinkColumn()
+    extension = tables.LinkColumn(verbose_name="Directory Number")
     partition = tables.LinkColumn()
     phone_system = tables.LinkColumn()
     actions = ButtonsColumn(models.DirectoryNumber)
@@ -179,3 +179,62 @@ class AnalogGatewayTable(BaseTable):
         model = models.AnalogGateway
         fields = ("pk", "name", "phone_system", "location", "model", "protocol", "actions")
         default_columns = ("pk", "name", "phone_system", "location", "model", "protocol", "actions")
+
+
+# --------------------------------------------------------------------------
+# Junction-model tables — used in nested ObjectsTablePanel on parent details
+# (e.g. "Lines on this phone", "Ports on this gateway"). These don't have
+# standalone list URLs; they only render as embedded tables.
+# --------------------------------------------------------------------------
+
+
+class LineTable(BaseTable):
+    """Lines (phone-button appearances) — embedded on Phone or DN detail."""
+
+    button_index = tables.Column()
+    phone = tables.LinkColumn()
+    directory_number = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.Line
+        fields = ("button_index", "phone", "directory_number", "label", "ring_setting")
+        default_columns = ("button_index", "phone", "directory_number", "label")
+
+
+class AnalogPortTable(BaseTable):
+    """Analog ports embedded on AnalogGateway or DN detail."""
+
+    port_index = tables.Column()
+    gateway = tables.LinkColumn()
+    directory_number = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.AnalogPort
+        fields = ("port_index", "gateway", "port_type", "directory_number")
+        default_columns = ("port_index", "gateway", "port_type", "directory_number")
+
+
+class CSSPartitionMembershipTable(BaseTable):
+    """Partition memberships embedded on CallingSearchSpace detail."""
+
+    priority = tables.Column()
+    partition = tables.LinkColumn()
+    css = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.CSSPartitionMembership
+        fields = ("priority", "partition", "css")
+        default_columns = ("priority", "partition", "css")
+
+
+class DIDAssignmentTable(BaseTable):
+    """DID assignments embedded on DID, DN, or Trunk detail."""
+
+    did = tables.LinkColumn()
+    target_type = tables.Column(verbose_name="Target Type")
+    assigned_at = tables.DateTimeColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.DIDAssignment
+        fields = ("did", "target_type", "assigned_at")
+        default_columns = ("did", "target_type", "assigned_at")

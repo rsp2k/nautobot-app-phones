@@ -130,6 +130,12 @@ class AXLClient:
         "listGateway": {"domainName": "%"},
     }
 
+    # AXL FK-type fields (XFkType) require an explicit sub-tag dict to return
+    # the actual referenced value — empty string at top level just gets you
+    # an empty wrapper. Pattern: {"_value_1": "", "uuid": ""} returns both
+    # the human-readable name and the GUID reference.
+    _FK_TAG = {"_value_1": "", "uuid": ""}
+
     _DEFAULT_TAGS: dict[str, dict] = {
         "listRoutePartition": {"name": "", "description": ""},
         "listCss": {"name": "", "description": ""},
@@ -137,8 +143,8 @@ class AXLClient:
             "pattern": "",
             "description": "",
             "alertingName": "",
-            "routePartitionName": "",
-            "voiceMailProfileName": "",
+            "routePartitionName": _FK_TAG,
+            "voiceMailProfileName": _FK_TAG,
         },
         "listPhone": {
             "name": "",
@@ -153,7 +159,7 @@ class AXLClient:
         "listRoutePattern": {
             "pattern": "",
             "description": "",
-            "routePartitionName": "",
+            "routePartitionName": _FK_TAG,
             "patternUrgency": "",
         },
         "listGateway": {

@@ -2,13 +2,21 @@
 
 Each PrimaryModel/OrganizationalModel gets a NautobotUIViewSet that bundles
 list, detail, create, edit, delete, and bulk-action views together. Each
-viewset wires in its model's table, filterset, and form classes.
+viewset also declares `object_detail_content` — a layout of panels that
+render on the detail page (model fields on the left, related-object
+tables on the right).
 
 Junction-style records (Line, AnalogPort, CSSPartitionMembership,
 DIDAssignment) don't have viewsets — they render nested in their parent's
-detail view (Phase 2c).
+detail view via ObjectsTablePanel.
 """
 
+from nautobot.apps.ui import (
+    ObjectDetailContent,
+    ObjectFieldsPanel,
+    ObjectsTablePanel,
+    SectionChoices,
+)
 from nautobot.apps.views import NautobotUIViewSet
 
 from nautobot_phones import filters, forms, models, tables
@@ -25,6 +33,41 @@ class PhoneSystemUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF,
+                weight=100,
+                fields=["name", "vendor", "version", "hostname", "secrets_group", "location", "last_synced_at"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.PartitionTable, table_filter="phone_system",
+                table_title="Partitions", exclude_columns=["phone_system"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.CallingSearchSpaceTable, table_filter="phone_system",
+                table_title="Calling Search Spaces", exclude_columns=["phone_system"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=300,
+                table_class=tables.PhoneTable, table_filter="phone_system",
+                table_title="Phones", exclude_columns=["phone_system"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=400,
+                table_class=tables.TrunkTable, table_filter="phone_system",
+                table_title="Trunks", exclude_columns=["phone_system"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=500,
+                table_class=tables.AnalogGatewayTable, table_filter="phone_system",
+                table_title="Analog Gateways", exclude_columns=["phone_system"],
+            ),
+        ),
+    )
+
 
 class CarrierUIViewSet(NautobotUIViewSet):
     """CRUD viewset for Carrier."""
@@ -36,6 +79,20 @@ class CarrierUIViewSet(NautobotUIViewSet):
     form_class = forms.CarrierForm
     serializer_class = None
     lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "description", "account_number"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.DIDBlockTable, table_filter="carrier",
+                table_title="DID Blocks", exclude_columns=["carrier"],
+            ),
+        ),
+    )
 
 
 class PartitionUIViewSet(NautobotUIViewSet):
@@ -49,6 +106,25 @@ class PartitionUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.DirectoryNumberTable, table_filter="partition",
+                table_title="Directory Numbers", exclude_columns=["partition"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.RoutePatternTable, table_filter="partition",
+                table_title="Route Patterns", exclude_columns=["partition"],
+            ),
+        ),
+    )
+
 
 class CallingSearchSpaceUIViewSet(NautobotUIViewSet):
     """CRUD viewset for CallingSearchSpace."""
@@ -60,6 +136,26 @@ class CallingSearchSpaceUIViewSet(NautobotUIViewSet):
     form_class = forms.CallingSearchSpaceForm
     serializer_class = None
     lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.CSSPartitionMembershipTable, table_filter="css",
+                table_title="Partition Members (in priority order)", exclude_columns=["css"],
+                order_by_fields=["priority"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.RoutePatternTable, table_filter="css",
+                table_title="Route Patterns Using This CSS", exclude_columns=["css"],
+            ),
+        ),
+    )
 
 
 class DirectoryNumberUIViewSet(NautobotUIViewSet):
@@ -73,6 +169,26 @@ class DirectoryNumberUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["extension", "partition", "phone_system", "alerting_name", "voicemail_profile"],
+                key_transforms={"extension": "Directory Number"},
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.LineTable, table_filter="directory_number",
+                table_title="Lines (phone-button appearances)", exclude_columns=["directory_number"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.AnalogPortTable, table_filter="directory_number",
+                table_title="Analog Ports", exclude_columns=["directory_number"],
+            ),
+        ),
+    )
+
 
 class DIDBlockUIViewSet(NautobotUIViewSet):
     """CRUD viewset for DIDBlock."""
@@ -84,6 +200,20 @@ class DIDBlockUIViewSet(NautobotUIViewSet):
     form_class = forms.DIDBlockForm
     serializer_class = None
     lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["start_e164", "end_e164", "size", "carrier", "location", "phone_system", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.DIDTable, table_filter="block",
+                table_title="Materialized DIDs", exclude_columns=["block"],
+            ),
+        ),
+    )
 
 
 class DIDUIViewSet(NautobotUIViewSet):
@@ -97,6 +227,15 @@ class DIDUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["e164", "block", "is_special"],
+            ),
+        ),
+    )
+
 
 class PhoneUIViewSet(NautobotUIViewSet):
     """CRUD viewset for Phone."""
@@ -108,6 +247,21 @@ class PhoneUIViewSet(NautobotUIViewSet):
     form_class = forms.PhoneForm
     serializer_class = None
     lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["device_name", "mac_address", "model", "phone_system", "location", "device", "registration_status"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.LineTable, table_filter="phone",
+                table_title="Lines (phone buttons)", exclude_columns=["phone"],
+                order_by_fields=["button_index"],
+            ),
+        ),
+    )
 
 
 class TrunkUIViewSet(NautobotUIViewSet):
@@ -121,6 +275,20 @@ class TrunkUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "trunk_type", "destination_address", "destination_port", "css", "inbound_css"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.RoutePatternTable, table_filter="target_trunk",
+                table_title="Route Patterns Targeting This Trunk", exclude_columns=["target_trunk"],
+            ),
+        ),
+    )
+
 
 class RoutePatternUIViewSet(NautobotUIViewSet):
     """CRUD viewset for RoutePattern."""
@@ -133,6 +301,15 @@ class RoutePatternUIViewSet(NautobotUIViewSet):
     serializer_class = None
     lookup_field = "pk"
 
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["pattern", "partition", "css", "target_trunk", "target_dn", "urgent", "discard_digits"],
+            ),
+        ),
+    )
+
 
 class AnalogGatewayUIViewSet(NautobotUIViewSet):
     """CRUD viewset for AnalogGateway."""
@@ -144,3 +321,17 @@ class AnalogGatewayUIViewSet(NautobotUIViewSet):
     form_class = forms.AnalogGatewayForm
     serializer_class = None
     lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "location", "device", "model", "protocol"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.AnalogPortTable, table_filter="gateway",
+                table_title="Ports", exclude_columns=["gateway"],
+            ),
+        ),
+    )
