@@ -93,6 +93,11 @@ menu_items = (
                         name="Route Patterns",
                         permissions=["nautobot_phones.view_routepattern"],
                     ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:translationpattern_list",
+                        name="Translation Patterns",
+                        permissions=["nautobot_phones.view_translationpattern"],
+                    ),
                 ),
             ),
             NavMenuGroup(

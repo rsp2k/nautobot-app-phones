@@ -37,6 +37,7 @@ from nautobot_phones.diffsync.models import (
     RouteListModel,
     RoutePatternModel,
     SpeedDialModel,
+    TranslationPatternModel,
     TrunkModel,
 )
 
@@ -77,6 +78,7 @@ class CUCMSourceAdapter(Adapter):
     route_list = RouteListModel
     route_group = RouteGroupModel
     route_pattern = RoutePatternModel
+    translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
 
     top_level = (
@@ -93,6 +95,7 @@ class CUCMSourceAdapter(Adapter):
         "route_list",
         "route_group",
         "route_pattern",
+        "translation_pattern",
         # analog_gateway deferred until we add per-record getGateway enrichment
     )
 
@@ -184,6 +187,7 @@ class CUCMSourceAdapter(Adapter):
         self._load_route_lists(ps.name)
         self._load_route_groups(ps.name)
         self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
+        self._load_translation_patterns(ps.name)
         # self._load_gateways(ps.name)        # v2 — needs getGateway enrichment
 
     # -- Per-collection loaders ----------------------------------------------
@@ -474,6 +478,25 @@ class CUCMSourceAdapter(Adapter):
                 discard_digits=_get(full, "discardDigits", "") or "",
                 target_trunk__name=target_trunk,
                 target_route_list__name=target_route_list,
+                css__name=css_name,
+            ))
+
+    def _load_translation_patterns(self, ps_name: str) -> None:
+        """Translation patterns rewrite digits and re-route — no target FK,
+        just pattern + partition + CSS + description. listTransPattern
+        returns everything we need in scalars; no per-record getX needed."""
+        for row in self.client.list_translation_patterns():
+            pattern = _get(row, "pattern", "")
+            if not pattern:
+                continue
+            partition_name = self._resolve_partition(_get(row, "routePartitionName"))
+            css_ref = _get(row, "callingSearchSpaceName")
+            css_name = _get(css_ref, "_value_1") if css_ref else None
+            self.add(self.translation_pattern(
+                pattern=pattern,
+                partition__name=partition_name,
+                partition__phone_system__name=ps_name,
+                description=_get(row, "description", "") or "",
                 css__name=css_name,
             ))
 

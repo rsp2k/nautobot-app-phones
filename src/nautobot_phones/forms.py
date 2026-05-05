@@ -254,6 +254,25 @@ class RoutePatternFilterForm(NautobotFilterForm):
 
 
 # --------------------------------------------------------------------------
+# TranslationPattern
+# --------------------------------------------------------------------------
+class TranslationPatternForm(NautobotModelForm):
+    """Create/edit form for TranslationPattern."""
+
+    class Meta:
+        model = models.TranslationPattern
+        fields = ("pattern", "partition", "css", "description", "vendor_extras", "tags")
+
+
+class TranslationPatternFilterForm(NautobotFilterForm):
+    """Filter sidebar form for TranslationPattern list view."""
+
+    model = models.TranslationPattern
+    field_order = ("q", "pattern", "partition", "css")
+    q = forms.CharField(required=False, label="Search")
+
+
+# --------------------------------------------------------------------------
 # AnalogGateway
 # --------------------------------------------------------------------------
 class AnalogGatewayForm(NautobotModelForm):

@@ -25,6 +25,7 @@ from nautobot_phones.models.routing import (
     RouteList,
     RouteListMember,
     RoutePattern,
+    TranslationPattern,
     Trunk,
 )
 from nautobot_phones.models.system import PhoneSystem
@@ -50,5 +51,6 @@ __all__ = [
     "RouteList",
     "RouteListMember",
     "RoutePattern",
+    "TranslationPattern",
     "Trunk",
 ]

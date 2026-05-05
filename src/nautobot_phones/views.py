@@ -134,6 +134,11 @@ class PartitionUIViewSet(NautobotUIViewSet):
                 table_class=tables.RoutePatternTable, table_filter="partition",
                 table_title="Route Patterns", exclude_columns=["partition"],
             ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=300,
+                table_class=tables.TranslationPatternTable, table_filter="partition",
+                table_title="Translation Patterns", exclude_columns=["partition"],
+            ),
         ),
     )
 
@@ -165,6 +170,11 @@ class CallingSearchSpaceUIViewSet(NautobotUIViewSet):
                 section=SectionChoices.RIGHT_HALF, weight=200,
                 table_class=tables.RoutePatternTable, table_filter="css",
                 table_title="Route Patterns Using This CSS", exclude_columns=["css"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=300,
+                table_class=tables.TranslationPatternTable, table_filter="css",
+                table_title="Translation Patterns Using This CSS", exclude_columns=["css"],
             ),
         ),
     )
@@ -395,6 +405,34 @@ class RoutePatternUIViewSet(NautobotUIViewSet):
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
                 fields=["pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent", "discard_digits"],
+            ),
+        ),
+    )
+
+
+class TranslationPatternUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for TranslationPattern.
+
+    Translation patterns transform dialed digits BEFORE the route-pattern
+    engine evaluates them — e.g. `911 → CER` rewrites a 3-digit emergency
+    call into the digits the CER trunk wants. The translated digits get
+    re-injected into the dial plan, so unlike RoutePattern there's no
+    target-trunk / target-DN field.
+    """
+
+    queryset = models.TranslationPattern.objects.all()
+    table_class = tables.TranslationPatternTable
+    filterset_class = filters.TranslationPatternFilterSet
+    filterset_form_class = forms.TranslationPatternFilterForm
+    form_class = forms.TranslationPatternForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["pattern", "partition", "css", "description"],
             ),
         ),
     )

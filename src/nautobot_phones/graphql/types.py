@@ -107,6 +107,12 @@ class RoutePatternType(OptimizedNautobotObjectType):
         filterset_class = filters.RoutePatternFilterSet
 
 
+class TranslationPatternType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.TranslationPattern
+        filterset_class = filters.TranslationPatternFilterSet
+
+
 class AnalogGatewayType(OptimizedNautobotObjectType):
     class Meta:
         model = models.AnalogGateway
@@ -136,6 +142,7 @@ graphql_types = [
     RouteGroupType,
     RouteGroupMemberType,
     RoutePatternType,
+    TranslationPatternType,
     AnalogGatewayType,
     AnalogPortType,
 ]

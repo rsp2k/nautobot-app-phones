@@ -25,6 +25,7 @@ router.register("trunks", views.TrunkUIViewSet)
 router.register("route-lists", views.RouteListUIViewSet)
 router.register("route-groups", views.RouteGroupUIViewSet)
 router.register("route-patterns", views.RoutePatternUIViewSet)
+router.register("translation-patterns", views.TranslationPatternUIViewSet)
 router.register("analog-gateways", views.AnalogGatewayUIViewSet)
 
 urlpatterns = router.urls

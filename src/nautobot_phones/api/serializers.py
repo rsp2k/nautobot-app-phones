@@ -115,6 +115,12 @@ class RoutePatternSerializer(NautobotModelSerializer):
         fields = "__all__"
 
 
+class TranslationPatternSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.TranslationPattern
+        fields = "__all__"
+
+
 class AnalogGatewaySerializer(NautobotModelSerializer):
     class Meta:
         model = models.AnalogGateway

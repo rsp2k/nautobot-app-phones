@@ -15,6 +15,7 @@ from nautobot_phones.diffsync.models.base import (
     RouteListModel,
     RoutePatternModel,
     SpeedDialModel,
+    TranslationPatternModel,
     TrunkModel,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "RouteListModel",
     "RoutePatternModel",
     "SpeedDialModel",
+    "TranslationPatternModel",
     "TrunkModel",
 ]

@@ -269,6 +269,21 @@ class AnalogPortTable(BaseTable):
         default_columns = ("port_index", "gateway", "port_type", "directory_number")
 
 
+class TranslationPatternTable(BaseTable):
+    """List-view table for TranslationPattern."""
+
+    pk = ToggleColumn()
+    pattern = tables.LinkColumn()
+    partition = tables.LinkColumn()
+    css = tables.LinkColumn()
+    actions = ButtonsColumn(models.TranslationPattern)
+
+    class Meta(BaseTable.Meta):
+        model = models.TranslationPattern
+        fields = ("pk", "pattern", "partition", "css", "description", "actions")
+        default_columns = ("pk", "pattern", "partition", "css", "description", "actions")
+
+
 class SpeedDialTable(BaseTable):
     """Speed dials embedded on Phone detail."""
 

@@ -26,6 +26,7 @@ router.register("route-list-members", views.RouteListMemberAPIViewSet)
 router.register("route-groups", views.RouteGroupAPIViewSet)
 router.register("route-group-members", views.RouteGroupMemberAPIViewSet)
 router.register("route-patterns", views.RoutePatternAPIViewSet)
+router.register("translation-patterns", views.TranslationPatternAPIViewSet)
 router.register("analog-gateways", views.AnalogGatewayAPIViewSet)
 router.register("analog-ports", views.AnalogPortAPIViewSet)
 

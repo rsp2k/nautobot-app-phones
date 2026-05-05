@@ -129,6 +129,7 @@ class AXLClient:
         # These ops use a different identifier:
         "listLine": {"pattern": "%"},
         "listRoutePattern": {"pattern": "%"},
+        "listTransPattern": {"pattern": "%"},
         "listGateway": {"domainName": "%"},
     }
 
@@ -163,6 +164,13 @@ class AXLClient:
             "description": "",
             "routePartitionName": _FK_TAG,
             "patternUrgency": "",
+        },
+        "listTransPattern": {
+            "pattern": "",
+            "description": "",
+            "usage": "",
+            "routePartitionName": _FK_TAG,
+            "callingSearchSpaceName": _FK_TAG,
         },
         "listGateway": {
             "domainName": "",
@@ -207,6 +215,10 @@ class AXLClient:
     def list_route_patterns(self, **overrides) -> list[Any]:
         """`listRoutePattern` — outbound routing patterns."""
         return self._list("listRoutePattern", "routePattern", **overrides)
+
+    def list_translation_patterns(self, **overrides) -> list[Any]:
+        """`listTransPattern` — digit translation patterns."""
+        return self._list("listTransPattern", "transPattern", **overrides)
 
     def list_gateways(self, **overrides) -> list[Any]:
         """`listGateway` — analog gateways (MGCP/SIP/SCCP)."""

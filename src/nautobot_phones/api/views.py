@@ -112,6 +112,12 @@ class RoutePatternAPIViewSet(NautobotModelViewSet):
     filterset_class = filters.RoutePatternFilterSet
 
 
+class TranslationPatternAPIViewSet(NautobotModelViewSet):
+    queryset = models.TranslationPattern.objects.all()
+    serializer_class = serializers.TranslationPatternSerializer
+    filterset_class = filters.TranslationPatternFilterSet
+
+
 class AnalogGatewayAPIViewSet(NautobotModelViewSet):
     queryset = models.AnalogGateway.objects.all()
     serializer_class = serializers.AnalogGatewaySerializer

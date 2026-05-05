@@ -252,6 +252,21 @@ class RoutePatternModel(NautobotModel):
     css__name: Optional[str] = None
 
 
+class TranslationPatternModel(NautobotModel):
+    """DiffSync model for TranslationPattern."""
+
+    _model = models.TranslationPattern
+    _modelname = "translation_pattern"
+    _identifiers = ("pattern", "partition__name", "partition__phone_system__name")
+    _attributes = ("description", "css__name")
+
+    pattern: str
+    partition__name: str
+    partition__phone_system__name: str
+    description: str = ""
+    css__name: Optional[str] = None
+
+
 class AnalogGatewayModel(NautobotModel):
     """DiffSync model for AnalogGateway."""
 

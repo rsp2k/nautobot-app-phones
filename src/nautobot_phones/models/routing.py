@@ -299,3 +299,56 @@ class RoutePattern(PrimaryModel):
     def __str__(self) -> str:
         """Display string."""
         return f"{self.partition.name}/{self.pattern}"
+
+
+class TranslationPattern(PrimaryModel):
+    """A digit-translation pattern (CCM TransPattern).
+
+    Matches a dialed number, applies digit transformations (prefix/strip/
+    mask) per CCM config, and re-routes the call through the dial plan.
+    Distinct from RoutePattern — translation patterns don't have a
+    direct destination, they REWRITE digits and let the dial plan
+    re-evaluate them.
+
+    For v1 we capture pattern + partition + CSS + description. Full
+    transformation rules (calledPartyTransformationMask, prefix/strip
+    digits, etc.) live in vendor_extras for now.
+    """
+
+    pattern = models.CharField(
+        max_length=100,
+        help_text="Dial pattern to match (CCM wildcards: X, [n-m], !, .).",
+    )
+    partition = models.ForeignKey(
+        to="nautobot_phones.Partition",
+        on_delete=models.PROTECT,
+        related_name="translation_patterns",
+    )
+    css = models.ForeignKey(
+        to="nautobot_phones.CallingSearchSpace",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="translation_patterns",
+        verbose_name="CSS",
+        help_text="CSS used when re-evaluating the translated digits.",
+    )
+    description = models.CharField(
+        max_length=200,
+        blank=True,
+    )
+    vendor_extras = models.JSONField(
+        default=dict, blank=True,
+        help_text="Vendor-specific transformation fields (mask, prefix, strip, etc.).",
+    )
+
+    natural_key_field_names = ["partition", "pattern"]
+
+    class Meta:
+        """Meta options for TranslationPattern."""
+
+        ordering = ("partition", "pattern")
+        unique_together = (("partition", "pattern"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.partition.name}/{self.pattern}"

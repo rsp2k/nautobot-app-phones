@@ -106,6 +106,14 @@ class RouteGroupFilterSet(NautobotFilterSet):
         fields = ["name", "phone_system", "distribution_algorithm"]
 
 
+class TranslationPatternFilterSet(NautobotFilterSet):
+    """Filter set for TranslationPattern list view."""
+
+    class Meta:
+        model = models.TranslationPattern
+        fields = ["pattern", "partition", "css", "description"]
+
+
 class AnalogGatewayFilterSet(NautobotFilterSet):
     """Filter set for AnalogGateway list view."""
 
