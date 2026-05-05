@@ -25,6 +25,7 @@ from diffsync import Adapter
 
 from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
+    AnalogPortModel,
     BusyLampFieldModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
@@ -97,6 +98,7 @@ class CUCMSourceAdapter(Adapter):
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
+    analog_port = AnalogPortModel
 
     top_level = (
         "phone_system",
@@ -114,7 +116,8 @@ class CUCMSourceAdapter(Adapter):
         "route_group",
         "route_pattern",
         "translation_pattern",
-        # analog_gateway deferred until we add per-record getGateway enrichment
+        "analog_gateway",
+        "analog_port",
     )
 
     type = "cisco-ucm"
@@ -212,7 +215,7 @@ class CUCMSourceAdapter(Adapter):
         self._load_route_groups(ps.name)
         self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
         self._load_translation_patterns(ps.name)
-        # self._load_gateways(ps.name)        # v2 — needs getGateway enrichment
+        self._load_gateways_and_ports(ps.name)
 
     # -- Per-collection loaders ----------------------------------------------
 
@@ -725,15 +728,134 @@ class CUCMSourceAdapter(Adapter):
                 vendor_extras=_extract_extras(row, exclude=EXPLICIT),
             ))
 
-    def _load_gateways(self, ps_name: str) -> None:
+    def _load_gateways_and_ports(self, ps_name: str) -> None:
+        """Sync analog gateways and the AN4-derived FXS port-DN bindings.
+
+        Two-phase:
+
+          1. listGateway → AnalogGateway records. NB: listGateway returns
+             gateways under the field `domainName`, NOT `name`. Earlier
+             code used the wrong field which silently produced empty-string
+             identifiers and zero records. We also call getGateway per row
+             to capture the unit/subunit hierarchy (module count, FXS
+             port count) into vendor_extras.
+
+          2. listPhone(name=AN4%) → AnalogPort records. CCM models analog
+             phones as AN4-prefix Phone records; their device-name encodes
+             gateway-suffix + port-hex. We parse that, look up the gateway
+             by suffix, getPhone to fetch the line/DN binding, and emit
+             one AnalogPort per record.
+        """
+        # Phase 1: gateways (with getGateway enrichment for unit info)
+        gateways_by_suffix: dict[str, str] = {}  # suffix → gateway_name
         for row in self.client.list_gateways():
+            gw_name = _get(row, "domainName", "") or ""
+            if not gw_name:
+                continue
+            # Pull deeper detail via getGateway — the unit/subunit array
+            # tells us module count + FXS port capacity. Wrapped in try so
+            # one bad gateway doesn't kill the loop.
+            unit_summary: list[dict] = []
+            try:
+                full = self._service_get_gateway(gw_name)
+                gw_full = _get(_get(full, "return"), "gateway") if full else None
+                units = _get(gw_full, "units")
+                unit_arr = _get(units, "unit", []) or []
+                if not isinstance(unit_arr, list):
+                    unit_arr = [unit_arr]
+                for u in unit_arr:
+                    subs = _get(u, "subunits")
+                    sub_arr = _get(subs, "subunit", []) or []
+                    if not isinstance(sub_arr, list):
+                        sub_arr = [sub_arr]
+                    for s in sub_arr:
+                        unit_summary.append({
+                            "unit_index": _get(u, "index"),
+                            "unit_product": _get(u, "product"),
+                            "subunit_index": _get(s, "index"),
+                            "subunit_product": _get(s, "product"),
+                            "begin_port": _get(s, "beginPort"),
+                        })
+            except Exception:  # noqa: BLE001
+                pass
+
+            extras = _extract_extras(row, exclude={"domainName", "product", "protocol"})
+            extras["module_units"] = unit_summary
+
             self.add(self.analog_gateway(
-                name=_get(row, "name", ""),
+                name=gw_name,
                 phone_system__name=ps_name,
                 model=_get(row, "product", "") or "",
                 protocol=(_get(row, "protocol", "mgcp") or "mgcp").lower(),
-                vendor_extras=_extract_extras(row, exclude={"name", "product", "protocol"}),
+                vendor_extras=extras,
             ))
+            # Build suffix → name map for AN4 lookup. Gateway names follow
+            # convention <SITE>GW<MAC-suffix> (e.g. "SKIGW4FB1F0C501") and
+            # AN4 device names use the same suffix. Match by trailing 9 chars.
+            if len(gw_name) >= 9:
+                gateways_by_suffix[gw_name[-9:].upper()] = gw_name
+
+        if not gateways_by_suffix:
+            return  # no gateways → no ports to sync
+
+        # Phase 2: AN4 records → AnalogPort. Pull all AN4* phones at once,
+        # then per-record getPhone for the line/DN binding.
+        an4_rows = self.client._list(
+            "listPhone", "phone",
+            search_criteria={"name": "AN4%"},
+            returned_tags={"name": "", "description": ""},
+        )
+        for an4 in an4_rows:
+            device_name = _get(an4, "name", "") or ""
+            # AN4 + 9-char-MAC + 3-char-port-hex = 15 chars exactly
+            if not device_name.startswith("AN4") or len(device_name) != 15:
+                continue
+            mac_suffix = device_name[3:12].upper()
+            port_hex = device_name[12:15]
+            gw_name = gateways_by_suffix.get(mac_suffix)
+            if gw_name is None:
+                continue  # AN4 references a gateway we don't have
+
+            try:
+                port_index = int(port_hex, 16)
+            except ValueError:
+                continue
+
+            # Lookup the bound DN via getPhone
+            try:
+                full = self.client.get_phone(device_name)
+            except Exception:  # noqa: BLE001
+                continue
+            dn_extension = None
+            dn_partition_name = None
+            lines = _get(_get(full, "lines"), "line", []) or []
+            if not isinstance(lines, list):
+                lines = [lines]
+            if lines:
+                dirn = _get(lines[0], "dirn")
+                if dirn:
+                    dn_extension = _get(dirn, "pattern", "") or None
+                    rp_ref = _get(dirn, "routePartitionName")
+                    dn_partition_name = self._resolve_partition(rp_ref) if rp_ref else None
+
+            self.add(self.analog_port(
+                gateway__name=gw_name,
+                gateway__phone_system__name=ps_name,
+                port_index=port_index,
+                port_type="fxs",  # AN4 phones are always on FXS ports
+                directory_number__extension=dn_extension,
+                directory_number__partition__name=dn_partition_name,
+            ))
+
+    def _service_get_gateway(self, name: str):
+        """Wrapper for getGateway — returns the raw zeep response.
+
+        Stays lightweight — caller uses _get() for tolerant attribute access.
+        """
+        try:
+            return self.client._service.getGateway(domainName=name)
+        except Exception:  # noqa: BLE001
+            return None
 
 
 def _extract_extras(obj: Any, exclude: set[str]) -> dict:

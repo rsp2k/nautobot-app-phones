@@ -422,14 +422,25 @@ class AnalogGatewayModel(NautobotModel):
 
 
 class AnalogPortModel(NautobotModel):
-    """DiffSync model for AnalogPort."""
+    """DiffSync model for AnalogPort.
+
+    Each AnalogPort is one (gateway, port_index) slot. For FXS ports
+    that have an analog phone connected, directory_number__extension
+    + directory_number__partition__name identify the bound DN.
+    """
 
     _model = models.AnalogPort
     _modelname = "analog_port"
     _identifiers = ("port_index", "gateway__name", "gateway__phone_system__name")
-    _attributes = ("port_type",)
+    _attributes = (
+        "port_type",
+        "directory_number__extension",
+        "directory_number__partition__name",
+    )
 
     port_index: int
     gateway__name: str
     gateway__phone_system__name: str
     port_type: str
+    directory_number__extension: Optional[str] = None
+    directory_number__partition__name: Optional[str] = None
