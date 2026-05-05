@@ -82,6 +82,30 @@ class TrunkAPIViewSet(NautobotModelViewSet):
     filterset_class = filters.TrunkFilterSet
 
 
+class RouteListAPIViewSet(NautobotModelViewSet):
+    queryset = models.RouteList.objects.all()
+    serializer_class = serializers.RouteListSerializer
+    filterset_class = filters.RouteListFilterSet
+
+
+class RouteListMemberAPIViewSet(NautobotModelViewSet):
+    queryset = models.RouteListMember.objects.all()
+    serializer_class = serializers.RouteListMemberSerializer
+    filterset_class = None
+
+
+class RouteGroupAPIViewSet(NautobotModelViewSet):
+    queryset = models.RouteGroup.objects.all()
+    serializer_class = serializers.RouteGroupSerializer
+    filterset_class = filters.RouteGroupFilterSet
+
+
+class RouteGroupMemberAPIViewSet(NautobotModelViewSet):
+    queryset = models.RouteGroupMember.objects.all()
+    serializer_class = serializers.RouteGroupMemberSerializer
+    filterset_class = None
+
+
 class RoutePatternAPIViewSet(NautobotModelViewSet):
     queryset = models.RoutePattern.objects.all()
     serializer_class = serializers.RoutePatternSerializer

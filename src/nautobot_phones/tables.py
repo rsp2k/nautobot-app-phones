@@ -156,14 +156,69 @@ class RoutePatternTable(BaseTable):
     partition = tables.LinkColumn()
     css = tables.LinkColumn(verbose_name="CSS")
     target_trunk = tables.LinkColumn()
+    target_route_list = tables.LinkColumn(verbose_name="Target Route List")
     target_dn = tables.LinkColumn(verbose_name="Target DN")
     urgent = tables.BooleanColumn()
     actions = ButtonsColumn(models.RoutePattern)
 
     class Meta(BaseTable.Meta):
         model = models.RoutePattern
-        fields = ("pk", "pattern", "partition", "css", "target_trunk", "target_dn", "urgent", "discard_digits", "actions")
-        default_columns = ("pk", "pattern", "partition", "target_trunk", "target_dn", "urgent", "actions")
+        fields = ("pk", "pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent", "discard_digits", "actions")
+        default_columns = ("pk", "pattern", "partition", "target_trunk", "target_route_list", "target_dn", "urgent", "actions")
+
+
+class RouteListTable(BaseTable):
+    """List-view table for RouteList."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.RouteList)
+
+    class Meta(BaseTable.Meta):
+        model = models.RouteList
+        fields = ("pk", "name", "phone_system", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "description", "actions")
+
+
+class RouteGroupTable(BaseTable):
+    """List-view table for RouteGroup."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.RouteGroup)
+
+    class Meta(BaseTable.Meta):
+        model = models.RouteGroup
+        fields = ("pk", "name", "phone_system", "distribution_algorithm", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "distribution_algorithm", "actions")
+
+
+class RouteListMemberTable(BaseTable):
+    """Memberships embedded on RouteList detail (priority order)."""
+
+    priority = tables.Column()
+    route_group = tables.LinkColumn()
+    route_list = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.RouteListMember
+        fields = ("priority", "route_group", "route_list")
+        default_columns = ("priority", "route_group")
+
+
+class RouteGroupMemberTable(BaseTable):
+    """Members embedded on RouteGroup detail."""
+
+    priority = tables.Column()
+    target_type = tables.Column(verbose_name="Target Type")
+    route_group = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.RouteGroupMember
+        fields = ("priority", "target_type", "route_group")
+        default_columns = ("priority", "target_type")
 
 
 class AnalogGatewayTable(BaseTable):

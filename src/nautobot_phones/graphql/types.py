@@ -79,6 +79,28 @@ class TrunkType(OptimizedNautobotObjectType):
         filterset_class = filters.TrunkFilterSet
 
 
+class RouteListType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.RouteList
+        filterset_class = filters.RouteListFilterSet
+
+
+class RouteListMemberType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.RouteListMember
+
+
+class RouteGroupType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.RouteGroup
+        filterset_class = filters.RouteGroupFilterSet
+
+
+class RouteGroupMemberType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.RouteGroupMember
+
+
 class RoutePatternType(OptimizedNautobotObjectType):
     class Meta:
         model = models.RoutePattern
@@ -109,6 +131,10 @@ graphql_types = [
     PhoneType,
     LineType,
     TrunkType,
+    RouteListType,
+    RouteListMemberType,
+    RouteGroupType,
+    RouteGroupMemberType,
     RoutePatternType,
     AnalogGatewayType,
     AnalogPortType,

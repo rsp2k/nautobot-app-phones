@@ -87,7 +87,23 @@ class RoutePatternFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.RoutePattern
-        fields = ["pattern", "partition", "css", "target_trunk", "target_dn", "urgent"]
+        fields = ["pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent"]
+
+
+class RouteListFilterSet(NautobotFilterSet):
+    """Filter set for RouteList list view."""
+
+    class Meta:
+        model = models.RouteList
+        fields = ["name", "phone_system"]
+
+
+class RouteGroupFilterSet(NautobotFilterSet):
+    """Filter set for RouteGroup list view."""
+
+    class Meta:
+        model = models.RouteGroup
+        fields = ["name", "phone_system", "distribution_algorithm"]
 
 
 class AnalogGatewayFilterSet(NautobotFilterSet):

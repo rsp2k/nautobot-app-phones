@@ -79,6 +79,16 @@ menu_items = (
                         permissions=["nautobot_phones.view_trunk"],
                     ),
                     NavMenuItem(
+                        link="plugins:nautobot_phones:routelist_list",
+                        name="Route Lists",
+                        permissions=["nautobot_phones.view_routelist"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:routegroup_list",
+                        name="Route Groups",
+                        permissions=["nautobot_phones.view_routegroup"],
+                    ),
+                    NavMenuItem(
                         link="plugins:nautobot_phones:routepattern_list",
                         name="Route Patterns",
                         permissions=["nautobot_phones.view_routepattern"],

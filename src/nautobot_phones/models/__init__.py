@@ -19,7 +19,14 @@ from nautobot_phones.models.numbers import (
     DIDBlock,
     DirectoryNumber,
 )
-from nautobot_phones.models.routing import RoutePattern, Trunk
+from nautobot_phones.models.routing import (
+    RouteGroup,
+    RouteGroupMember,
+    RouteList,
+    RouteListMember,
+    RoutePattern,
+    Trunk,
+)
 from nautobot_phones.models.system import PhoneSystem
 
 __all__ = [
@@ -36,6 +43,10 @@ __all__ = [
     "Partition",
     "Phone",
     "PhoneSystem",
+    "RouteGroup",
+    "RouteGroupMember",
+    "RouteList",
+    "RouteListMember",
     "RoutePattern",
     "Trunk",
 ]

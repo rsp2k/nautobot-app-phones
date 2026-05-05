@@ -82,6 +82,23 @@ class AnalogGatewayProtocolChoices(ChoiceSet):
     )
 
 
+class RouteGroupAlgorithmChoices(ChoiceSet):
+    """Member-selection algorithm for a Route Group.
+
+    CCM evaluates the members in priority order; the algorithm controls
+    what happens when there are multiple candidates at the same priority
+    or how subsequent calls are distributed.
+    """
+
+    TOP_DOWN = "top_down"
+    CIRCULAR = "circular"
+
+    CHOICES = (
+        (TOP_DOWN, "Top Down (always try first available)"),
+        (CIRCULAR, "Circular (round-robin across members)"),
+    )
+
+
 class RegistrationStatusChoices(ChoiceSet):
     """Last-known registration state of a phone with its call agent."""
 

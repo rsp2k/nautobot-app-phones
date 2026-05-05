@@ -197,6 +197,44 @@ class TrunkFilterForm(NautobotFilterForm):
 
 
 # --------------------------------------------------------------------------
+# RouteList
+# --------------------------------------------------------------------------
+class RouteListForm(NautobotModelForm):
+    """Create/edit form for RouteList."""
+
+    class Meta:
+        model = models.RouteList
+        fields = ("name", "phone_system", "description", "vendor_extras", "tags")
+
+
+class RouteListFilterForm(NautobotFilterForm):
+    """Filter sidebar form for RouteList list view."""
+
+    model = models.RouteList
+    field_order = ("q", "name", "phone_system")
+    q = forms.CharField(required=False, label="Search")
+
+
+# --------------------------------------------------------------------------
+# RouteGroup
+# --------------------------------------------------------------------------
+class RouteGroupForm(NautobotModelForm):
+    """Create/edit form for RouteGroup."""
+
+    class Meta:
+        model = models.RouteGroup
+        fields = ("name", "phone_system", "description", "distribution_algorithm", "vendor_extras", "tags")
+
+
+class RouteGroupFilterForm(NautobotFilterForm):
+    """Filter sidebar form for RouteGroup list view."""
+
+    model = models.RouteGroup
+    field_order = ("q", "name", "phone_system", "distribution_algorithm")
+    q = forms.CharField(required=False, label="Search")
+
+
+# --------------------------------------------------------------------------
 # RoutePattern
 # --------------------------------------------------------------------------
 class RoutePatternForm(NautobotModelForm):
@@ -204,14 +242,14 @@ class RoutePatternForm(NautobotModelForm):
 
     class Meta:
         model = models.RoutePattern
-        fields = ("pattern", "partition", "css", "target_trunk", "target_dn", "urgent", "discard_digits", "tags")
+        fields = ("pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent", "discard_digits", "tags")
 
 
 class RoutePatternFilterForm(NautobotFilterForm):
     """Filter sidebar form for RoutePattern list view."""
 
     model = models.RoutePattern
-    field_order = ("q", "pattern", "partition", "css", "target_trunk", "target_dn", "urgent")
+    field_order = ("q", "pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent")
     q = forms.CharField(required=False, label="Search")
 
 

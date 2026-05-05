@@ -290,6 +290,70 @@ class TrunkUIViewSet(NautobotUIViewSet):
     )
 
 
+class RouteListUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for RouteList."""
+
+    queryset = models.RouteList.objects.all()
+    table_class = tables.RouteListTable
+    filterset_class = filters.RouteListFilterSet
+    filterset_form_class = forms.RouteListFilterForm
+    form_class = forms.RouteListForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.RouteListMemberTable, table_filter="route_list",
+                table_title="Member Route Groups (priority order)", exclude_columns=["route_list"],
+                order_by_fields=["priority"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.RoutePatternTable, table_filter="target_route_list",
+                table_title="Route Patterns Targeting This List", exclude_columns=["target_route_list"],
+            ),
+        ),
+    )
+
+
+class RouteGroupUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for RouteGroup."""
+
+    queryset = models.RouteGroup.objects.all()
+    table_class = tables.RouteGroupTable
+    filterset_class = filters.RouteGroupFilterSet
+    filterset_form_class = forms.RouteGroupFilterForm
+    form_class = forms.RouteGroupForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "distribution_algorithm", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.RouteGroupMemberTable, table_filter="route_group",
+                table_title="Member Devices (priority order)", exclude_columns=["route_group"],
+                order_by_fields=["priority"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.RouteListMemberTable, table_filter="route_group",
+                table_title="Route Lists Containing This Group", exclude_columns=["route_group"],
+            ),
+        ),
+    )
+
+
 class RoutePatternUIViewSet(NautobotUIViewSet):
     """CRUD viewset for RoutePattern."""
 
@@ -305,7 +369,7 @@ class RoutePatternUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["pattern", "partition", "css", "target_trunk", "target_dn", "urgent", "discard_digits"],
+                fields=["pattern", "partition", "css", "target_trunk", "target_route_list", "target_dn", "urgent", "discard_digits"],
             ),
         ),
     )

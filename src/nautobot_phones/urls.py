@@ -22,6 +22,8 @@ router.register("did-blocks", views.DIDBlockUIViewSet)
 router.register("dids", views.DIDUIViewSet)
 router.register("phones", views.PhoneUIViewSet)
 router.register("trunks", views.TrunkUIViewSet)
+router.register("route-lists", views.RouteListUIViewSet)
+router.register("route-groups", views.RouteGroupUIViewSet)
 router.register("route-patterns", views.RoutePatternUIViewSet)
 router.register("analog-gateways", views.AnalogGatewayUIViewSet)
 

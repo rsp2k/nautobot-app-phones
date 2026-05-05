@@ -85,6 +85,30 @@ class TrunkSerializer(NautobotModelSerializer):
         fields = "__all__"
 
 
+class RouteListSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.RouteList
+        fields = "__all__"
+
+
+class RouteListMemberSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.RouteListMember
+        fields = "__all__"
+
+
+class RouteGroupSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.RouteGroup
+        fields = "__all__"
+
+
+class RouteGroupMemberSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.RouteGroupMember
+        fields = "__all__"
+
+
 class RoutePatternSerializer(NautobotModelSerializer):
     class Meta:
         model = models.RoutePattern
