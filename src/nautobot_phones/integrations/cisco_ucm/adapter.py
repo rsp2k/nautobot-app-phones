@@ -31,10 +31,12 @@ from nautobot_phones.diffsync.models import (
     LineModel,
     PartitionModel,
     PhoneModel,
+    PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
     RouteListModel,
     RoutePatternModel,
+    SpeedDialModel,
     TrunkModel,
 )
 
@@ -69,6 +71,8 @@ class CUCMSourceAdapter(Adapter):
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
+    speed_dial = SpeedDialModel
+    phone_service_url = PhoneServiceUrlModel
     trunk = TrunkModel
     route_list = RouteListModel
     route_group = RouteGroupModel
@@ -83,6 +87,8 @@ class CUCMSourceAdapter(Adapter):
         "directory_number",
         "phone",
         "line",
+        "speed_dial",
+        "phone_service_url",
         "trunk",
         "route_list",
         "route_group",
@@ -130,11 +136,13 @@ class CUCMSourceAdapter(Adapter):
         # Populated by _fetch_ris_data when enrich_phone_ip=True; map of
         # CUCM device-name (e.g. "SEPCAFEBABE0001") to IP address string.
         self._ip_map: dict[str, str] = {}
-        # When enrich_phone_lines is off, exclude `line` from the diff so
-        # existing Line records in Nautobot aren't wiped by the sync. The
-        # Job pairs this with the same exclusion on the destination adapter.
+        # When enrich_phone_lines is off, exclude all per-phone button models
+        # (Line, SpeedDial, PhoneServiceUrl) from the diff so existing
+        # records in Nautobot aren't wiped. Job pairs this with the same
+        # exclusion on the destination adapter.
         if not enrich_phone_lines:
-            self.top_level = tuple(t for t in self.top_level if t != "line")
+            _button_models = {"line", "speed_dial", "phone_service_url"}
+            self.top_level = tuple(t for t in self.top_level if t not in _button_models)
 
     def _resolve_partition(self, ref: Any) -> str:
         """Pull the partition name out of a routePartitionName ref.
@@ -327,10 +335,12 @@ class CUCMSourceAdapter(Adapter):
             self.job.logger.info(f"  RisPort returned {len(self._ip_map)} phones with IPs")
 
     def _enrich_lines(self, ps_name: str, sep_devices: list) -> None:
-        """Walk each SEP* phone via getPhone to pull its lines + DN refs."""
+        """Walk each SEP* phone via getPhone to pull lines, speed dials,
+        and service URLs. All three live in the same getPhone response, so
+        one call enriches all three button kinds at once."""
         total = len(sep_devices)
         if self.job:
-            self.job.logger.info(f"Enriching {total} phones with line data (this may take several minutes)...")
+            self.job.logger.info(f"Enriching {total} phones with line/speed-dial/service data (this may take several minutes)...")
         for idx, (device_name, _) in enumerate(sep_devices):
             if self.job and idx and idx % 100 == 0:
                 self.job.logger.info(f"  Enriched {idx}/{total} phones...")
@@ -342,6 +352,7 @@ class CUCMSourceAdapter(Adapter):
                 continue
             if phone_obj is None:
                 continue
+            # Lines (DN appearances)
             lines_container = _get(phone_obj, "lines")
             line_arr = _get(lines_container, "line", []) or []
             for line in line_arr:
@@ -359,6 +370,35 @@ class CUCMSourceAdapter(Adapter):
                     directory_number__partition__name=dn_partition_name,
                     label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
+                ))
+            # Speed dials — `dirn` here is a plain string (the destination
+            # number), unlike Line's `dirn` which is a complex DN reference.
+            sd_container = _get(phone_obj, "speeddials")
+            sd_arr = _get(sd_container, "speeddial", []) or []
+            for sd in sd_arr:
+                number = _get(sd, "dirn", "") or ""
+                if not number:
+                    continue
+                self.add(self.speed_dial(
+                    phone__device_name=device_name,
+                    phone__phone_system__name=ps_name,
+                    button_index=int(_get(sd, "index", 0) or 0),
+                    number=str(number),
+                    label=_get(sd, "label", "") or "",
+                ))
+            # Service URLs — XML services (Extension Mobility, custom apps).
+            svc_container = _get(phone_obj, "services")
+            svc_arr = _get(svc_container, "service", []) or []
+            for svc in svc_arr:
+                url = _get(svc, "url", "") or ""
+                if not url:
+                    continue
+                self.add(self.phone_service_url(
+                    phone__device_name=device_name,
+                    phone__phone_system__name=ps_name,
+                    button_index=int(_get(svc, "urlButtonIndex", 0) or 0),
+                    url=str(url),
+                    label=_get(svc, "label", "") or "",
                 ))
 
     def _load_route_lists(self, ps_name: str) -> None:

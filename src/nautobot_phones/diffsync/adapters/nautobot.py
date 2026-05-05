@@ -27,10 +27,12 @@ from nautobot_phones.diffsync.models import (
     LineModel,
     PartitionModel,
     PhoneModel,
+    PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
     RouteListModel,
     RoutePatternModel,
+    SpeedDialModel,
     TrunkModel,
 )
 
@@ -45,6 +47,8 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
+    speed_dial = SpeedDialModel
+    phone_service_url = PhoneServiceUrlModel
     trunk = TrunkModel
     route_list = RouteListModel
     route_group = RouteGroupModel
@@ -60,6 +64,8 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "directory_number",
         "phone",
         "line",
+        "speed_dial",
+        "phone_service_url",
         "trunk",
         "route_list",
         "route_group",
@@ -68,15 +74,20 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "analog_port",
     )
 
+    # Models that only get populated by per-phone getPhone enrichment.
+    # Excluded from the diff when enrich is off, so existing records aren't
+    # orphan-deleted by a plain sync.
+    _BUTTON_MODELS = ("line", "speed_dial", "phone_service_url")
+
     def __init__(self, *args, include_lines=True, **kwargs):
-        """`include_lines=False` excludes Line from the diff entirely.
+        """`include_lines=False` excludes per-phone button models from diff.
 
         Pair with the source adapter's `enrich_phone_lines=False` to leave
-        existing Line records in Nautobot alone when the sync isn't doing
-        the slow per-phone getPhone enrichment. Both adapters need to
-        agree, otherwise DiffSync sees an empty source vs populated dest
-        and tries to delete the orphans.
+        existing Line / SpeedDial / PhoneServiceUrl records in Nautobot
+        alone when the sync isn't doing the slow per-phone getPhone
+        enrichment. Both adapters need to agree, otherwise DiffSync sees
+        an empty source vs populated dest and tries to delete the orphans.
         """
         super().__init__(*args, **kwargs)
         if not include_lines:
-            self.top_level = tuple(t for t in self.top_level if t != "line")
+            self.top_level = tuple(t for t in self.top_level if t not in self._BUTTON_MODELS)

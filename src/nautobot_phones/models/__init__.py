@@ -10,7 +10,7 @@ from nautobot_phones.models.dialplan import (
     CSSPartitionMembership,
     Partition,
 )
-from nautobot_phones.models.endpoints import Line, Phone
+from nautobot_phones.models.endpoints import Line, Phone, PhoneServiceUrl, SpeedDial
 from nautobot_phones.models.gateways import AnalogGateway, AnalogPort
 from nautobot_phones.models.numbers import (
     DID,
@@ -42,7 +42,9 @@ __all__ = [
     "Line",
     "Partition",
     "Phone",
+    "PhoneServiceUrl",
     "PhoneSystem",
+    "SpeedDial",
     "RouteGroup",
     "RouteGroupMember",
     "RouteList",

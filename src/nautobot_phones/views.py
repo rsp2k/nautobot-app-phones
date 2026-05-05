@@ -273,6 +273,18 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 table_title="Lines (phone buttons)", exclude_columns=["phone"],
                 order_by_fields=["button_index"],
             ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.SpeedDialTable, table_filter="phone",
+                table_title="Speed Dials", exclude_columns=["phone"],
+                order_by_fields=["button_index"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=300,
+                table_class=tables.PhoneServiceUrlTable, table_filter="phone",
+                table_title="Service URLs", exclude_columns=["phone"],
+                order_by_fields=["button_index"],
+            ),
         ),
     )
 

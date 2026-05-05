@@ -269,6 +269,32 @@ class AnalogPortTable(BaseTable):
         default_columns = ("port_index", "gateway", "port_type", "directory_number")
 
 
+class SpeedDialTable(BaseTable):
+    """Speed dials embedded on Phone detail."""
+
+    button_index = tables.Column()
+    number = tables.Column()
+    label = tables.Column()
+
+    class Meta(BaseTable.Meta):
+        model = models.SpeedDial
+        fields = ("button_index", "number", "label")
+        default_columns = ("button_index", "number", "label")
+
+
+class PhoneServiceUrlTable(BaseTable):
+    """Service URL buttons embedded on Phone detail."""
+
+    button_index = tables.Column()
+    label = tables.Column()
+    url = tables.Column()
+
+    class Meta(BaseTable.Meta):
+        model = models.PhoneServiceUrl
+        fields = ("button_index", "label", "url")
+        default_columns = ("button_index", "label", "url")
+
+
 class CSSPartitionMembershipTable(BaseTable):
     """Partition memberships embedded on CallingSearchSpace detail."""
 

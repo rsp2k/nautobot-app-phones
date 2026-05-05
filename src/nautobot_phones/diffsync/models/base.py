@@ -146,6 +146,36 @@ class LineModel(NautobotModel):
     ring_setting: str = ""
 
 
+class SpeedDialModel(NautobotModel):
+    """DiffSync model for a SpeedDial button."""
+
+    _model = models.SpeedDial
+    _modelname = "speed_dial"
+    _identifiers = ("phone__device_name", "phone__phone_system__name", "button_index")
+    _attributes = ("number", "label")
+
+    phone__device_name: str
+    phone__phone_system__name: str
+    button_index: int
+    number: str
+    label: str = ""
+
+
+class PhoneServiceUrlModel(NautobotModel):
+    """DiffSync model for a Phone Service URL button."""
+
+    _model = models.PhoneServiceUrl
+    _modelname = "phone_service_url"
+    _identifiers = ("phone__device_name", "phone__phone_system__name", "button_index")
+    _attributes = ("url", "label")
+
+    phone__device_name: str
+    phone__phone_system__name: str
+    button_index: int
+    url: str
+    label: str = ""
+
+
 class TrunkModel(NautobotModel):
     """DiffSync model for Trunk."""
 

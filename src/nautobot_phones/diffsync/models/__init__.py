@@ -9,10 +9,12 @@ from nautobot_phones.diffsync.models.base import (
     LineModel,
     PartitionModel,
     PhoneModel,
+    PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
     RouteListModel,
     RoutePatternModel,
+    SpeedDialModel,
     TrunkModel,
 )
 
@@ -25,9 +27,11 @@ __all__ = [
     "LineModel",
     "PartitionModel",
     "PhoneModel",
+    "PhoneServiceUrlModel",
     "PhoneSystemModel",
     "RouteGroupModel",
     "RouteListModel",
     "RoutePatternModel",
+    "SpeedDialModel",
     "TrunkModel",
 ]

@@ -128,3 +128,81 @@ class Line(BaseModel):
     def __str__(self) -> str:
         """Display string."""
         return f"{self.phone.device_name}[{self.button_index}] -> {self.directory_number.extension}"
+
+
+class SpeedDial(BaseModel):
+    """A programmed speed-dial button on a phone.
+
+    Different from Line: stores a raw destination number (not a FK to a DN
+    record), so external numbers and outbound prefixes work too. Index space
+    is independent of Line button-index — CCM tracks them in separate arrays.
+    """
+
+    phone = models.ForeignKey(
+        to="nautobot_phones.Phone",
+        on_delete=models.CASCADE,
+        related_name="speed_dials",
+    )
+    button_index = models.PositiveSmallIntegerField(
+        help_text="1-based position within the phone's speed-dial array.",
+    )
+    number = models.CharField(
+        max_length=64,
+        help_text="Destination digits (extension, E.164, or anything CCM passes).",
+    )
+    label = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Text shown next to the speed-dial button.",
+    )
+
+    class Meta:
+        """Meta options for SpeedDial."""
+
+        ordering = ("phone", "button_index")
+        unique_together = (("phone", "button_index"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        label = f" '{self.label}'" if self.label else ""
+        return f"{self.phone.device_name} speed-dial[{self.button_index}] -> {self.number}{label}"
+
+
+class PhoneServiceUrl(BaseModel):
+    """A Service URL button on a phone.
+
+    Cisco IP phones can have buttons that launch XML services (Extension
+    Mobility, custom directories, weather widgets, etc.). The URL is
+    typically a CCM-templated string with #DEVICENAME# / #EMCC# variables
+    expanded at click time.
+    """
+
+    phone = models.ForeignKey(
+        to="nautobot_phones.Phone",
+        on_delete=models.CASCADE,
+        related_name="service_urls",
+    )
+    button_index = models.PositiveSmallIntegerField(
+        help_text="0-based position within the phone's services array.",
+    )
+    url = models.TextField(
+        help_text="Service URL — CCM-templated, may contain #DEVICENAME# etc.",
+    )
+    label = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Text shown next to the service button.",
+    )
+
+    class Meta:
+        """Meta options for PhoneServiceUrl."""
+
+        ordering = ("phone", "button_index")
+        unique_together = (("phone", "button_index"),)
+        verbose_name = "Phone Service URL"
+        verbose_name_plural = "Phone Service URLs"
+
+    def __str__(self) -> str:
+        """Display string."""
+        label = f" '{self.label}'" if self.label else ""
+        return f"{self.phone.device_name} service[{self.button_index}]{label}"
