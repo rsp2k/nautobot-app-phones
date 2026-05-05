@@ -35,10 +35,10 @@ from nautobot_phones.models import PhoneSystem
 class CUCMDataSource(DataSource):
     """Sync a Cisco UCM cluster into Nautobot."""
 
-    dry_run = BooleanVar(
-        default=True,
-        description="Calculate the diff but do not write to Nautobot.",
-    )
+    # Note: parent DataSource already provides `dryrun` (no underscore); we
+    # don't redeclare it. Was a copy-paste from sibling plugins that caused
+    # the form to render two "Dry run" checkboxes side-by-side.
+
     phone_system = ObjectVar(
         model=PhoneSystem,
         query_params={"vendor": "cisco_ucm"},
@@ -147,7 +147,7 @@ class CUCMDataSource(DataSource):
     def execute_sync(self) -> None:
         """After the standard DiffSync flow, optionally auto-create Devices."""
         super().execute_sync()
-        if not self.enrich_phone_devices or self.dry_run:
+        if not self.enrich_phone_devices or self.dryrun:
             return
         from nautobot_phones.integrations.cisco_ucm.devices import enrich_phone_devices
         result = enrich_phone_devices(
