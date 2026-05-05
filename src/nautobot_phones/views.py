@@ -11,6 +11,7 @@ DIDAssignment) don't have viewsets — they render nested in their parent's
 detail view via ObjectsTablePanel.
 """
 
+from django.utils.html import format_html
 from nautobot.apps.ui import (
     ObjectDetailContent,
     ObjectFieldsPanel,
@@ -18,6 +19,17 @@ from nautobot.apps.ui import (
     SectionChoices,
 )
 from nautobot.apps.views import NautobotUIViewSet
+
+
+def _https_link(value):
+    """Render an IP/hostname as an HTTPS link to the device's admin UI.
+
+    Cisco phones expose an admin web interface at https://<ip>/ — clicking
+    the IP in the detail view opens that admin UI in a new tab.
+    """
+    if not value:
+        return value
+    return format_html('<a href="https://{0}/" target="_blank" rel="noopener noreferrer">{0}</a>', value)
 
 from nautobot_phones import filters, forms, models, tables
 
@@ -253,6 +265,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
                 fields=["device_name", "mac_address", "model", "phone_system", "location", "device", "registration_status", "last_registered_ip"],
+                value_transforms={"last_registered_ip": [_https_link]},
             ),
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,

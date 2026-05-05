@@ -251,7 +251,7 @@ class CUCMSourceAdapter(Adapter):
                     button_index=int(_get(line, "index", 0) or 0),
                     directory_number__extension=dn_pattern,
                     directory_number__partition__name=dn_partition_name,
-                    label=_get(line, "label", "") or "",
+                    label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
                 ))
 
@@ -317,7 +317,7 @@ class CUCMSourceAdapter(Adapter):
                     button_index=int(_get(line, "index", 0) or 0),
                     directory_number__extension=dn_pattern,
                     directory_number__partition__name=dn_partition_name,
-                    label=_get(line, "label", "") or "",
+                    label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
                 ))
 
