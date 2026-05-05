@@ -42,6 +42,21 @@ from nautobot_phones.diffsync.models import (
 )
 
 
+def _axl_bool(v: Any) -> bool:
+    """Coerce AXL's stringly-typed booleans into real bools.
+
+    AXL returns booleans as the literal strings ``"true"`` / ``"false"``
+    (lowercase), occasionally with surrounding whitespace, and very
+    occasionally as actual Python bools when zeep parses an xsd:boolean
+    cleanly. Treat anything that isn't an affirmative string as False.
+    """
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() == "true"
+
+
 def _get(obj: Any, name: str, default=None) -> Any:
     """Tolerant attribute access for AXL response objects.
 
@@ -482,9 +497,27 @@ class CUCMSourceAdapter(Adapter):
             ))
 
     def _load_translation_patterns(self, ps_name: str) -> None:
-        """Translation patterns rewrite digits and re-route — no target FK,
-        just pattern + partition + CSS + description. listTransPattern
-        returns everything we need in scalars; no per-record getX needed."""
+        """Translation patterns rewrite digits and re-route — no destination FK.
+
+        listTransPattern returns the full Pattern Definition + Calling/Called
+        Party Transformation field set in scalars (no per-record getX needed).
+        We surface the operationally-important fields as explicit columns
+        and drop the long-tail dropdowns (presentation bits, numbering plans,
+        number types) into vendor_extras for fidelity.
+        """
+        # Fields that get explicit columns — exclude them from vendor_extras
+        # so we don't double-store. The remaining AXL fields (presentation
+        # bits, numbering plans, etc.) flow through to vendor_extras.
+        EXPLICIT = {
+            "pattern", "description", "routePartitionName", "callingSearchSpaceName",
+            "blockEnable", "releaseClause", "patternUrgency", "provideOutsideDialtone",
+            "useOriginatorCss", "dontWaitForIDTOnSubsequentHops", "routeNextHopByCgpn",
+            "isEmergencyServiceNumber", "routeClass",
+            "useCallingPartyPhoneMask", "callingPartyTransformationMask",
+            "callingPartyPrefixDigits",
+            "digitDiscardInstructionName", "calledPartyTransformationMask",
+            "prefixDigitsOut",
+        }
         for row in self.client.list_translation_patterns():
             pattern = _get(row, "pattern", "")
             if not pattern:
@@ -492,12 +525,34 @@ class CUCMSourceAdapter(Adapter):
             partition_name = self._resolve_partition(_get(row, "routePartitionName"))
             css_ref = _get(row, "callingSearchSpaceName")
             css_name = _get(css_ref, "_value_1") if css_ref else None
+            ddi_ref = _get(row, "digitDiscardInstructionName")
+            ddi_name = _get(ddi_ref, "_value_1", "") if ddi_ref else ""
             self.add(self.translation_pattern(
                 pattern=pattern,
                 partition__name=partition_name,
                 partition__phone_system__name=ps_name,
                 description=_get(row, "description", "") or "",
                 css__name=css_name,
+                # Pattern Definition
+                block_enable=_axl_bool(_get(row, "blockEnable")),
+                release_clause=(_get(row, "releaseClause", "") or ""),
+                urgent_priority=_axl_bool(_get(row, "patternUrgency")),
+                provide_outside_dial_tone=_axl_bool(_get(row, "provideOutsideDialtone")),
+                use_originator_css=_axl_bool(_get(row, "useOriginatorCss")),
+                dont_wait_for_idt=_axl_bool(_get(row, "dontWaitForIDTOnSubsequentHops")),
+                route_next_hop_by_cgpn=_axl_bool(_get(row, "routeNextHopByCgpn")),
+                is_emergency_service_number=_axl_bool(_get(row, "isEmergencyServiceNumber")),
+                route_class=(_get(row, "routeClass", "") or ""),
+                # Calling Party Transformations
+                use_calling_party_phone_mask=(_get(row, "useCallingPartyPhoneMask", "") or ""),
+                calling_party_transformation_mask=(_get(row, "callingPartyTransformationMask", "") or ""),
+                calling_party_prefix_digits=(_get(row, "callingPartyPrefixDigits", "") or ""),
+                # Called Party Transformations
+                digit_discard_instruction=(ddi_name or ""),
+                called_party_transformation_mask=(_get(row, "calledPartyTransformationMask", "") or ""),
+                prefix_digits_out=(_get(row, "prefixDigitsOut", "") or ""),
+                # Long-tail (presentation bits, numbering plans, types)
+                vendor_extras=_extract_extras(row, exclude=EXPLICIT),
             ))
 
     def _load_gateways(self, ps_name: str) -> None:

@@ -270,18 +270,36 @@ class AnalogPortTable(BaseTable):
 
 
 class TranslationPatternTable(BaseTable):
-    """List-view table for TranslationPattern."""
+    """List-view table for TranslationPattern.
+
+    Default columns surface the operationally-most-useful subset: pattern,
+    partition, CSS, description, plus the called-party prefix
+    (`prefix_digits_out`) which is the most-asked-about transform value
+    when operators ask "what does this pattern actually DO?".
+    """
 
     pk = ToggleColumn()
     pattern = tables.LinkColumn()
     partition = tables.LinkColumn()
     css = tables.LinkColumn()
+    urgent_priority = tables.BooleanColumn(verbose_name="Urgent")
+    block_enable = tables.BooleanColumn(verbose_name="Block")
     actions = ButtonsColumn(models.TranslationPattern)
 
     class Meta(BaseTable.Meta):
         model = models.TranslationPattern
-        fields = ("pk", "pattern", "partition", "css", "description", "actions")
-        default_columns = ("pk", "pattern", "partition", "css", "description", "actions")
+        fields = (
+            "pk", "pattern", "partition", "css", "description",
+            "block_enable", "urgent_priority",
+            "calling_party_transformation_mask", "calling_party_prefix_digits",
+            "digit_discard_instruction", "called_party_transformation_mask",
+            "prefix_digits_out",
+            "actions",
+        )
+        default_columns = (
+            "pk", "pattern", "partition", "css",
+            "prefix_digits_out", "description", "actions",
+        )
 
 
 class SpeedDialTable(BaseTable):

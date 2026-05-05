@@ -418,6 +418,11 @@ class TranslationPatternUIViewSet(NautobotUIViewSet):
     call into the digits the CER trunk wants. The translated digits get
     re-injected into the dial plan, so unlike RoutePattern there's no
     target-trunk / target-DN field.
+
+    Detail layout mirrors the CCM admin form's three sections (Pattern
+    Definition, Calling Party Transformations, Called Party Transformations)
+    so operators jumping between Nautobot and the CCM admin UI see the
+    same field grouping in both places.
     """
 
     queryset = models.TranslationPattern.objects.all()
@@ -432,7 +437,32 @@ class TranslationPatternUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["pattern", "partition", "css", "description"],
+                label="Pattern Definition",
+                fields=[
+                    "pattern", "partition", "css", "description",
+                    "block_enable", "release_clause", "urgent_priority",
+                    "provide_outside_dial_tone", "use_originator_css",
+                    "dont_wait_for_idt", "route_next_hop_by_cgpn",
+                    "is_emergency_service_number", "route_class",
+                ],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                label="Calling Party Transformations",
+                fields=[
+                    "use_calling_party_phone_mask",
+                    "calling_party_transformation_mask",
+                    "calling_party_prefix_digits",
+                ],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                label="Called Party Transformations",
+                fields=[
+                    "digit_discard_instruction",
+                    "called_party_transformation_mask",
+                    "prefix_digits_out",
+                ],
             ),
         ),
     )

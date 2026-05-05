@@ -310,11 +310,16 @@ class TranslationPattern(PrimaryModel):
     direct destination, they REWRITE digits and let the dial plan
     re-evaluate them.
 
-    For v1 we capture pattern + partition + CSS + description. Full
-    transformation rules (calledPartyTransformationMask, prefix/strip
-    digits, etc.) live in vendor_extras for now.
+    Field grouping mirrors the CCM admin form's three sections:
+    Pattern Definition, Calling Party Transformations, and Called
+    Party Transformations. Long-tail dropdowns that almost always
+    sit at "Default" / "Cisco CallManager" (presentation bits,
+    numbering plans, number types, connected-party transformations)
+    live in `vendor_extras` to keep the schema readable while still
+    preserving full fidelity from the source cluster.
     """
 
+    # ---- Pattern Definition --------------------------------------------------
     pattern = models.CharField(
         max_length=100,
         help_text="Dial pattern to match (CCM wildcards: X, [n-m], !, .).",
@@ -332,13 +337,58 @@ class TranslationPattern(PrimaryModel):
         verbose_name="CSS",
         help_text="CSS used when re-evaluating the translated digits.",
     )
-    description = models.CharField(
-        max_length=200,
-        blank=True,
+    description = models.CharField(max_length=200, blank=True)
+    block_enable = models.BooleanField(
+        default=False,
+        help_text="If true, this pattern BLOCKS the call rather than translating it.",
     )
+    release_clause = models.CharField(
+        max_length=64, blank=True, default="",
+        help_text='Block reason (e.g. "No Error", "Unallocated Number"). '
+                  "Only meaningful when block_enable=True.",
+    )
+    urgent_priority = models.BooleanField(
+        default=False,
+        help_text="Match this pattern as soon as it qualifies — don't wait for inter-digit timeout.",
+    )
+    provide_outside_dial_tone = models.BooleanField(default=False)
+    use_originator_css = models.BooleanField(
+        default=False,
+        help_text="If true, re-evaluation uses the originating phone's CSS rather than this pattern's CSS.",
+    )
+    dont_wait_for_idt = models.BooleanField(
+        default=False, verbose_name="Don't Wait for IDT",
+        help_text="Do not wait for interdigit timeout on subsequent dial-plan hops.",
+    )
+    route_next_hop_by_cgpn = models.BooleanField(
+        default=False, verbose_name="Route Next Hop by Calling Party",
+    )
+    is_emergency_service_number = models.BooleanField(default=False)
+    route_class = models.CharField(max_length=32, blank=True, default="Default")
+
+    # ---- Calling Party Transformations ---------------------------------------
+    use_calling_party_phone_mask = models.CharField(
+        max_length=16, blank=True, default="Off",
+        help_text='Tri-state: "Off", "On", or "Default".',
+    )
+    calling_party_transformation_mask = models.CharField(max_length=64, blank=True)
+    calling_party_prefix_digits = models.CharField(max_length=64, blank=True)
+
+    # ---- Called Party Transformations ----------------------------------------
+    digit_discard_instruction = models.CharField(
+        max_length=64, blank=True,
+        help_text='Named DDI applied to dialed digits (e.g. "PreDot", "PreAt").',
+    )
+    called_party_transformation_mask = models.CharField(max_length=64, blank=True)
+    prefix_digits_out = models.CharField(
+        max_length=64, blank=True,
+        help_text="Digits prepended to the called number (CCM 'Prefix Digits (Outgoing Calls)').",
+    )
+
+    # ---- Vendor extras -------------------------------------------------------
     vendor_extras = models.JSONField(
         default=dict, blank=True,
-        help_text="Vendor-specific transformation fields (mask, prefix, strip, etc.).",
+        help_text="Long-tail CCM fields (presentation bits, numbering plans, etc.).",
     )
 
     natural_key_field_names = ["partition", "pattern"]

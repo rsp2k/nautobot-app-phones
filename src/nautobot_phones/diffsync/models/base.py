@@ -253,18 +253,61 @@ class RoutePatternModel(NautobotModel):
 
 
 class TranslationPatternModel(NautobotModel):
-    """DiffSync model for TranslationPattern."""
+    """DiffSync model for TranslationPattern.
+
+    `_attributes` declares the fields that flow through the diff —
+    grouped to mirror the CCM admin form's three sections. Long-tail
+    AXL fields (presentation bits, numbering plans, number types)
+    accumulate in `vendor_extras` so the diff sees them as a single
+    JSON blob rather than ~10 individual attributes that would never
+    differ between syncs (those values are almost universally Default).
+    """
 
     _model = models.TranslationPattern
     _modelname = "translation_pattern"
     _identifiers = ("pattern", "partition__name", "partition__phone_system__name")
-    _attributes = ("description", "css__name")
+    _attributes = (
+        "description", "css__name",
+        # Pattern Definition
+        "block_enable", "release_clause", "urgent_priority",
+        "provide_outside_dial_tone", "use_originator_css",
+        "dont_wait_for_idt", "route_next_hop_by_cgpn",
+        "is_emergency_service_number", "route_class",
+        # Calling Party Transformations
+        "use_calling_party_phone_mask", "calling_party_transformation_mask",
+        "calling_party_prefix_digits",
+        # Called Party Transformations
+        "digit_discard_instruction", "called_party_transformation_mask",
+        "prefix_digits_out",
+        # Long-tail JSON
+        "vendor_extras",
+    )
 
     pattern: str
     partition__name: str
     partition__phone_system__name: str
     description: str = ""
     css__name: Optional[str] = None
+    # Pattern Definition
+    block_enable: bool = False
+    release_clause: str = ""
+    urgent_priority: bool = False
+    provide_outside_dial_tone: bool = False
+    use_originator_css: bool = False
+    dont_wait_for_idt: bool = False
+    route_next_hop_by_cgpn: bool = False
+    is_emergency_service_number: bool = False
+    route_class: str = ""
+    # Calling Party Transformations
+    use_calling_party_phone_mask: str = ""
+    calling_party_transformation_mask: str = ""
+    calling_party_prefix_digits: str = ""
+    # Called Party Transformations
+    digit_discard_instruction: str = ""
+    called_party_transformation_mask: str = ""
+    prefix_digits_out: str = ""
+    # Long-tail JSON
+    vendor_extras: dict = {}
 
 
 class AnalogGatewayModel(NautobotModel):

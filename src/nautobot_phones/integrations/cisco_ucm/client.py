@@ -165,12 +165,44 @@ class AXLClient:
             "routePartitionName": _FK_TAG,
             "patternUrgency": "",
         },
+        # Translation Patterns: full Pattern Definition + Calling/Called Party
+        # Transformation field set. The CCM admin form groups these into three
+        # sections; we mirror that. Long-tail fields (presentation bits,
+        # numbering plans, number types) come back too — the adapter routes
+        # them into vendor_extras for fidelity without polluting the schema.
         "listTransPattern": {
             "pattern": "",
             "description": "",
             "usage": "",
             "routePartitionName": _FK_TAG,
             "callingSearchSpaceName": _FK_TAG,
+            # Pattern Definition
+            "blockEnable": "",
+            "releaseClause": "",
+            "patternUrgency": "",
+            "provideOutsideDialtone": "",
+            "useOriginatorCss": "",
+            "dontWaitForIDTOnSubsequentHops": "",
+            "routeNextHopByCgpn": "",
+            "isEmergencyServiceNumber": "",
+            "routeClass": "",
+            # Calling Party Transformations
+            "useCallingPartyPhoneMask": "",
+            "callingPartyTransformationMask": "",
+            "callingPartyPrefixDigits": "",
+            "callingLinePresentationBit": "",
+            "callingNamePresentationBit": "",
+            "callingPartyNumberType": "",
+            "callingPartyNumberingPlan": "",
+            # Connected Party Transformations (long-tail → vendor_extras)
+            "connectedLinePresentationBit": "",
+            "connectedNamePresentationBit": "",
+            # Called Party Transformations
+            "digitDiscardInstructionName": _FK_TAG,
+            "calledPartyTransformationMask": "",
+            "prefixDigitsOut": "",
+            "calledPartyNumberType": "",
+            "calledPartyNumberingPlan": "",
         },
         "listGateway": {
             "domainName": "",

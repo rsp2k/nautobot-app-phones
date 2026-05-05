@@ -257,11 +257,30 @@ class RoutePatternFilterForm(NautobotFilterForm):
 # TranslationPattern
 # --------------------------------------------------------------------------
 class TranslationPatternForm(NautobotModelForm):
-    """Create/edit form for TranslationPattern."""
+    """Create/edit form for TranslationPattern.
+
+    Field order mirrors the CCM admin form: Pattern Definition first,
+    then Calling Party Transformations, then Called Party Transformations.
+    """
 
     class Meta:
         model = models.TranslationPattern
-        fields = ("pattern", "partition", "css", "description", "vendor_extras", "tags")
+        fields = (
+            # Pattern Definition
+            "pattern", "partition", "css", "description",
+            "block_enable", "release_clause", "urgent_priority",
+            "provide_outside_dial_tone", "use_originator_css",
+            "dont_wait_for_idt", "route_next_hop_by_cgpn",
+            "is_emergency_service_number", "route_class",
+            # Calling Party Transformations
+            "use_calling_party_phone_mask", "calling_party_transformation_mask",
+            "calling_party_prefix_digits",
+            # Called Party Transformations
+            "digit_discard_instruction", "called_party_transformation_mask",
+            "prefix_digits_out",
+            # Misc
+            "vendor_extras", "tags",
+        )
 
 
 class TranslationPatternFilterForm(NautobotFilterForm):
