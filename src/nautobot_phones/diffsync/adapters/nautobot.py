@@ -22,6 +22,7 @@ from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     AnalogPortModel,
     CallingSearchSpaceModel,
+    CSSPartitionMembershipModel,
     DirectoryNumberModel,
     LineModel,
     PartitionModel,
@@ -40,6 +41,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     phone_system = PhoneSystemModel
     partition = PartitionModel
     calling_search_space = CallingSearchSpaceModel
+    css_partition_membership = CSSPartitionMembershipModel
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
@@ -54,6 +56,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "phone_system",
         "partition",
         "calling_search_space",
+        "css_partition_membership",
         "directory_number",
         "phone",
         "line",

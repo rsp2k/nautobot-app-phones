@@ -26,6 +26,7 @@ from diffsync import Adapter
 from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     CallingSearchSpaceModel,
+    CSSPartitionMembershipModel,
     DirectoryNumberModel,
     LineModel,
     PartitionModel,
@@ -64,6 +65,7 @@ class CUCMSourceAdapter(Adapter):
     phone_system = PhoneSystemModel
     partition = PartitionModel
     calling_search_space = CallingSearchSpaceModel
+    css_partition_membership = CSSPartitionMembershipModel
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
@@ -77,6 +79,7 @@ class CUCMSourceAdapter(Adapter):
         "phone_system",
         "partition",
         "calling_search_space",
+        "css_partition_membership",
         "directory_number",
         "phone",
         "line",
@@ -188,12 +191,44 @@ class CUCMSourceAdapter(Adapter):
         ))
 
     def _load_calling_search_spaces(self, ps_name: str) -> None:
-        for row in self.client.list_css():
+        css_rows = self.client.list_css()
+        for row in css_rows:
             self.add(self.calling_search_space(
                 name=_get(row, "name", ""),
                 phone_system__name=ps_name,
                 description=_get(row, "description", "") or "",
             ))
+        # Per-CSS getCss enrichment for partition memberships. listCss only
+        # returns scalar fields (no `members` element); the membership
+        # association lives only in getCss. ~16 CSSes per typical cluster
+        # makes this cheap (~3-5s) so it's always-on rather than gated by
+        # an opt-in flag.
+        for row in css_rows:
+            css_name = _get(row, "name", "")
+            if not css_name:
+                continue
+            try:
+                full = getattr(self.client._service.getCss(name=css_name), "return").css
+            except Exception:
+                continue  # one bad CSS shouldn't blow up the whole sync
+            members_obj = _get(full, "members")
+            member_arr = _get(members_obj, "member") or [] if members_obj else []
+            for member in member_arr:
+                rp = _get(member, "routePartitionName")
+                part_name = _get(rp, "_value_1") if rp else None
+                if not part_name:
+                    part_name = self.NULL_PARTITION_NAME
+                idx = _get(member, "index", 1)
+                try:
+                    priority = int(idx) if idx is not None else 1
+                except (TypeError, ValueError):
+                    priority = 1
+                self.add(self.css_partition_membership(
+                    css__phone_system__name=ps_name,
+                    css__name=css_name,
+                    partition__name=part_name,
+                    priority=priority,
+                ))
 
     def _load_directory_numbers(self, ps_name: str) -> None:
         for row in self.client.list_lines():

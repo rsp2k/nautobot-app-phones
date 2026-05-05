@@ -62,6 +62,25 @@ class CallingSearchSpaceModel(NautobotModel):
     description: str = ""
 
 
+class CSSPartitionMembershipModel(NautobotModel):
+    """DiffSync model for CSSPartitionMembership (through-table).
+
+    Identifier shape: (css's phone_system, css's name, partition's name).
+    Partition's phone_system is implied — CCM never lets a CSS reference a
+    partition from a different phone system.
+    """
+
+    _model = models.CSSPartitionMembership
+    _modelname = "css_partition_membership"
+    _identifiers = ("css__phone_system__name", "css__name", "partition__name")
+    _attributes = ("priority",)
+
+    css__phone_system__name: str
+    css__name: str
+    partition__name: str
+    priority: int = 1
+
+
 class DirectoryNumberModel(NautobotModel):
     """DiffSync model for DirectoryNumber."""
 
