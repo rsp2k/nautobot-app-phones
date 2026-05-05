@@ -129,8 +129,8 @@ class PhoneTable(BaseTable):
 
     class Meta(BaseTable.Meta):
         model = models.Phone
-        fields = ("pk", "device_name", "mac_address", "model", "phone_system", "location", "registration_status", "last_registered_ip", "actions")
-        default_columns = ("pk", "device_name", "mac_address", "model", "phone_system", "registration_status", "last_registered_ip", "actions")
+        fields = ("pk", "device_name", "mac_address", "model", "description", "phone_system", "location", "registration_status", "last_registered_ip", "actions")
+        default_columns = ("pk", "device_name", "description", "mac_address", "model", "phone_system", "last_registered_ip", "actions")
 
 
 class TrunkTable(BaseTable):
@@ -288,6 +288,20 @@ class PhoneServiceUrlTable(BaseTable):
     button_index = tables.Column()
     label = tables.Column()
     url = tables.Column()
+
+    def render_url(self, value):
+        """Wrap the URL in <a href> so it's clickable.
+
+        CCM service URLs commonly include template variables like
+        #DEVICENAME# / #EMCC# — those won't resolve as literal clicks
+        but the wrapping is still useful for plain URLs and for
+        copy-paste workflows.
+        """
+        from html import escape
+        from django.utils.safestring import mark_safe
+        return mark_safe(
+            f'<a href="{escape(str(value))}" target="_blank" rel="noopener">{escape(str(value))}</a>'
+        )
 
     class Meta(BaseTable.Meta):
         model = models.PhoneServiceUrl

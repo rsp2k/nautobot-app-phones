@@ -279,9 +279,10 @@ class CUCMSourceAdapter(Adapter):
                 phone_system__name=ps_name,
                 device_name=device_name,
                 model=_get(phone_row, "model", "") or "",
+                description=_get(phone_row, "description", "") or "",
                 registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
                 last_registered_ip=ip,
-                vendor_extras=_extract_extras(phone_row, exclude={"name", "model", "currentRegistrationStatus"}),
+                vendor_extras=_extract_extras(phone_row, exclude={"name", "model", "description", "currentRegistrationStatus"}),
             ))
 
             # Lines are nested children of the phone.

@@ -31,6 +31,11 @@ class Phone(PrimaryModel):
         blank=True,
         help_text="Phone model string (e.g. 'CP-8851', 'ATA-191', 'T54W').",
     )
+    description = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Free-text label from the phone-system config (e.g. 'Joe Smith - Sales').",
+    )
     phone_system = models.ForeignKey(
         to="nautobot_phones.PhoneSystem",
         on_delete=models.CASCADE,

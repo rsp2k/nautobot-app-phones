@@ -107,12 +107,13 @@ class PhoneModel(NautobotModel):
     _model = models.Phone
     _modelname = "phone"
     _identifiers = ("mac_address", "phone_system__name")
-    _attributes = ("device_name", "model", "registration_status", "last_registered_ip", "vendor_extras")
+    _attributes = ("device_name", "model", "description", "registration_status", "last_registered_ip", "vendor_extras")
 
     mac_address: str
     phone_system__name: str
     device_name: str
     model: str = ""
+    description: str = ""
     registration_status: str = "unknown"
     last_registered_ip: Optional[str] = None
     vendor_extras: dict = {}

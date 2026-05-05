@@ -264,7 +264,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["device_name", "mac_address", "model", "phone_system", "location", "device", "registration_status", "last_registered_ip"],
+                fields=["device_name", "description", "mac_address", "model", "phone_system", "location", "device", "registration_status", "last_registered_ip"],
                 value_transforms={"last_registered_ip": [_https_link]},
             ),
             ObjectsTablePanel(
