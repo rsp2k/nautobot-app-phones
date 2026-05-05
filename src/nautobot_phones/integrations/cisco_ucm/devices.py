@@ -29,7 +29,7 @@ from nautobot.dcim.models import Device, DeviceType, Interface, Manufacturer
 from nautobot.extras.models import Role, Status
 from nautobot.ipam.models import IPAddress, IPAddressToInterface, Namespace, Prefix
 
-from nautobot_phones.models import Phone
+from nautobot_phones.models import AnalogGateway, AnalogPort, Phone
 
 
 # Models that have only ONE physical port (no PC pass-through, no voice VLAN
@@ -244,3 +244,134 @@ def _ensure_ip_address(ip_str: str) -> IPAddress:
         defaults={"status": active_ip, "mask_length": mask},
     )
     return ip
+
+
+# --------------------------------------------------------------------------
+# AnalogGateway → DCIM Device matching
+# --------------------------------------------------------------------------
+#
+# Unlike Phones (where CCM device-name encodes the chassis MAC), CCM gateway
+# names are operator-chosen and rarely match the network hostname. For
+# Lab, CCM has SKIGW4FB1F0C501 but DCIM has BH01-R00-ANALOG-GW. So we
+# can't rely on a single matching strategy — try several in order, log
+# unmatched gateways for operator action.
+
+def enrich_analog_gateway_devices(*, logger=None) -> dict:
+    """Match each AnalogGateway to an existing dcim.Device.
+
+    Multi-strategy linker (does NOT create Devices — gateways come from
+    network discovery, not CCM. Auto-creating risks duplicates against
+    DCIM's authoritative inventory):
+
+      1. **Exact name match**: Device.name == AnalogGateway.name. Hits
+         when CCM device-name and network hostname happen to align.
+
+      2. **MAC-base hint**: extract the 4-byte chassis MAC base from the
+         CCM device-name (last 10 chars minus '01' suffix) and search
+         Device.serial / Device.name / Device.comments for it. Hits in
+         shops that name devices by MAC.
+
+      3. **Unique DeviceType in PhoneSystem location**: if the gateway's
+         model (e.g. VG450) matches exactly one Device of that DeviceType
+         in the PhoneSystem's Location, link it. Catches the Lab case
+         where there's exactly one VG450 in the campus.
+
+    Operators can always override by setting AnalogGateway.device manually
+    in the UI; once linked, this pass leaves it alone.
+    """
+    log = (logger.info if logger else print)
+    matched_exact = matched_mac_base = matched_unique_dt = 0
+    skipped_already_linked = unmatched = 0
+
+    for gw in AnalogGateway.objects.select_related("device", "phone_system__location"):
+        if gw.device_id is not None:
+            skipped_already_linked += 1
+            continue
+
+        device = None
+        match_strategy = None
+
+        # Strategy 1: exact name match
+        device = Device.objects.filter(name=gw.name).first()
+        if device:
+            match_strategy = "exact-name"
+            matched_exact += 1
+
+        # Strategy 2: MAC-base hint in serial/name/comments
+        if device is None:
+            mac_base = _extract_chassis_mac_base(gw.name)
+            if mac_base:
+                from django.db.models import Q
+                device = Device.objects.filter(
+                    Q(serial__icontains=mac_base)
+                    | Q(name__icontains=mac_base)
+                    | Q(comments__icontains=mac_base)
+                ).first()
+                if device:
+                    match_strategy = f"mac-base[{mac_base}]"
+                    matched_mac_base += 1
+
+        # Strategy 3: unique DeviceType match.
+        #
+        # First try within the PhoneSystem's Location (most precise — handles
+        # multi-site clusters where each site has its own gateway). If that
+        # returns nothing (common when CCM-side and DCIM-side use different
+        # location-naming conventions), fall back to cluster-wide uniqueness.
+        # Only auto-link if there's exactly ONE candidate; ambiguity stays
+        # unmatched so the operator picks.
+        if device is None and gw.model:
+            cluster_location = gw.phone_system.location if gw.phone_system_id else None
+            base_qs = Device.objects.filter(device_type__model__iexact=gw.model)
+            if cluster_location:
+                scoped = base_qs.filter(location=cluster_location)
+                if scoped.count() == 1:
+                    device = scoped.first()
+                    match_strategy = f"unique-{gw.model}-in-{cluster_location.name}"
+                    matched_unique_dt += 1
+            if device is None and base_qs.count() == 1:
+                device = base_qs.first()
+                match_strategy = f"unique-{gw.model}-cluster-wide"
+                matched_unique_dt += 1
+
+        if device is None:
+            unmatched += 1
+            log(f"  AnalogGateway '{gw.name}' (model={gw.model}) — no Device match. "
+                f"Set the link manually in the UI.")
+            continue
+
+        gw.device = device
+        gw.save()
+        log(f"  Linked AnalogGateway '{gw.name}' → Device '{device.name}' "
+            f"({device.serial or 'no-serial'}) via {match_strategy}")
+
+    return {
+        "matched_exact": matched_exact,
+        "matched_mac_base": matched_mac_base,
+        "matched_unique_dt": matched_unique_dt,
+        "skipped_already_linked": skipped_already_linked,
+        "unmatched": unmatched,
+    }
+
+
+def _extract_chassis_mac_base(ccm_name: str) -> str:
+    """Extract the chassis MAC base from a CCM gateway name.
+
+    CCM gateway-naming convention seen at Lab: <SITE>GW<base-mac><01>
+    where base-mac is the 4-byte chassis MAC (8 hex chars) and '01' is a
+    constant unit-marker suffix. For SKIGW4FB1F0C501 this yields '4FB1F0C5'.
+
+    Returns empty string when the name doesn't match the expected shape —
+    callers fall through to other matching strategies.
+    """
+    if len(ccm_name) < 10:
+        return ""
+    suffix10 = ccm_name[-10:].upper()
+    if not suffix10.endswith("01"):
+        return ""
+    base = suffix10[:8]
+    # Must be all-hex (or it's not a MAC base)
+    try:
+        int(base, 16)
+        return base
+    except ValueError:
+        return ""

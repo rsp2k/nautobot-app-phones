@@ -149,7 +149,12 @@ class CUCMDataSource(DataSource):
         super().execute_sync()
         if not self.enrich_phone_devices or self.dryrun:
             return
-        from nautobot_phones.integrations.cisco_ucm.devices import enrich_phone_devices
+        from nautobot_phones.integrations.cisco_ucm.devices import (
+            enrich_analog_gateway_devices,
+            enrich_phone_devices,
+        )
+        # Phase 1: phones → DCIM Devices (auto-creates, since each Phone is
+        # uniquely identified by MAC).
         result = enrich_phone_devices(
             default_location=self.default_phone_location,
             logger=self.logger,
@@ -161,6 +166,18 @@ class CUCMDataSource(DataSource):
             result["skipped_already_linked"],
             result["skipped_no_location"],
             result["errored"],
+        )
+        # Phase 2: AnalogGateways → existing DCIM Devices (matches only,
+        # never creates — DCIM is the authority for gateway hardware).
+        gw_result = enrich_analog_gateway_devices(logger=self.logger)
+        self.logger.info(
+            "AnalogGateway-Device matching: matched_exact=%d, matched_mac_base=%d, "
+            "matched_unique_dt=%d, skipped_already_linked=%d, unmatched=%d",
+            gw_result["matched_exact"],
+            gw_result["matched_mac_base"],
+            gw_result["matched_unique_dt"],
+            gw_result["skipped_already_linked"],
+            gw_result["unmatched"],
         )
 
 
