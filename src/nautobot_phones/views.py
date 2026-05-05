@@ -277,7 +277,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 section=SectionChoices.LEFT_HALF, weight=100,
                 label="Phone",
                 fields=[
-                    "device_name", "description", "mac_address", "model",
+                    "device_name", "device_kind", "description", "mac_address", "model",
                     "phone_system", "device", "location",  # `location` is a @property reading device.location
                     "ccm_location", "network_location",
                     "registration_status", "last_registered_ip",

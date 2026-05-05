@@ -113,3 +113,44 @@ class RegistrationStatusChoices(ChoiceSet):
         (PARTIALLY_REGISTERED, "Partially registered"),
         (UNKNOWN, "Unknown"),
     )
+
+
+class PhoneDeviceKindChoices(ChoiceSet):
+    """The kind of phone endpoint this Phone record represents.
+
+    CCM identifies device type by the device_name prefix:
+
+      - SEP: physical IP phone (`SEP<MAC>`)
+      - CSF: Cisco Jabber Softphone, Windows/Mac (`CSF<USERNAME>`)
+      - TCT: Cisco Jabber for iPhone/iPad (`TCT<USERNAME>`)
+      - BOT: Cisco Jabber for Android (`BOT<USERNAME>`)
+      - CSK: Cisco Softphone variant (`CSK<USERNAME>`)
+      - ATA: Cisco ATA-19x analog terminal adapter (`ATA<MAC>`)
+      - CTI: CTI port (call-routing virtual endpoint — modeled separately later)
+
+    SEP and ATA encode a real MAC in the device name. The Jabber variants
+    (CSF/TCT/BOT/CSK) encode a username instead — they have no MAC, just
+    a CCM-side login identity. We use this field to filter "real phones"
+    vs softphones in the UI and to gate the device-creation pass (which
+    only makes sense for physical hardware).
+    """
+
+    SEP = "sep"
+    CSF = "csf"
+    TCT = "tct"
+    BOT = "bot"
+    CSK = "csk"
+    ATA = "ata"
+    CTI = "cti"
+    OTHER = "other"
+
+    CHOICES = (
+        (SEP, "Physical IP Phone (SEP)"),
+        (CSF, "Jabber Desktop (CSF)"),
+        (TCT, "Jabber iOS (TCT)"),
+        (BOT, "Jabber Android (BOT)"),
+        (CSK, "Cisco Softphone Variant (CSK)"),
+        (ATA, "Analog Terminal Adapter (ATA)"),
+        (CTI, "CTI Port"),
+        (OTHER, "Other"),
+    )

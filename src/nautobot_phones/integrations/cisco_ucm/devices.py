@@ -79,9 +79,19 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
     skipped_already_linked = 0
     errored = 0
 
+    skipped_softphone = 0
+    # Only physical endpoints get DCIM Devices. Jabber softphones (CSF/TCT/
+    # BOT/CSK) are software endpoints — they don't have cabling, ports, or
+    # rack positions. Trying to model them in DCIM would force-fit unrelated
+    # concepts. They live as Phone records only.
+    HARDWARE_KINDS = {"sep", "ata"}
+
     for phone in Phone.objects.select_related("device", "phone_system__location"):
         if phone.device_id is not None:
             skipped_already_linked += 1
+            continue
+        if phone.device_kind not in HARDWARE_KINDS:
+            skipped_softphone += 1
             continue
 
         # Phone.location was removed (it was a dcim.Location FK that got
@@ -135,6 +145,7 @@ def enrich_phone_devices(*, default_location=None, logger=None) -> dict:
         "created": created,
         "skipped_no_location": skipped_no_location,
         "skipped_already_linked": skipped_already_linked,
+        "skipped_softphone": skipped_softphone,
         "errored": errored,
     }
 

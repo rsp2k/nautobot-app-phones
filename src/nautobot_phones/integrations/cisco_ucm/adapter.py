@@ -277,22 +277,42 @@ class CUCMSourceAdapter(Adapter):
                 vendor_extras=_extract_extras(row, exclude={"pattern", "routePartitionName", "alertingName"}),
             ))
 
+    # Device-name prefix → device_kind value. Anything not in this dict is
+    # currently out of scope (CTI ports, gateway-side analog phones land in
+    # follow-up phases with their own model semantics).
+    _PHONE_KINDS_BY_PREFIX = {
+        "SEP": "sep",  # Physical IP phones — real MAC, full hardware
+        "CSF": "csf",  # Cisco Jabber Desktop (Windows/Mac)
+        "TCT": "tct",  # Cisco Jabber for iPhone/iPad
+        "BOT": "bot",  # Cisco Jabber for Android
+        "CSK": "csk",  # CSF variant
+        "ATA": "ata",  # Cisco ATA-19x analog terminal adapter
+    }
+
     def _load_phones_and_lines(self, ps_name: str) -> None:
-        skipped_non_sep = 0
+        skipped_non_phone = 0
         sep_devices: list[tuple[str, Any]] = []  # (device_name, listPhone-row) for enrichment phase
         for phone_row in self.client.list_phones():
             device_name = _get(phone_row, "name", "") or ""
 
-            # CUCM phones come in many flavors: SEP* (physical), CSF*/TCT*/
-            # TAB* (softphones), BOT* (bots), CER-CTI-* (Emergency Responder
-            # CTI ports). Only SEP* devices have real MAC addresses. v1 syncs
-            # only the physical phones; softphones/CTI ports can land in a
-            # future phase with a synthetic-MAC scheme or a relaxed schema.
-            if not device_name.startswith("SEP") or len(device_name) != 15:
-                skipped_non_sep += 1
+            # Dispatch on device_name prefix. SEP/ATA encode a real MAC in the
+            # name (15 chars: 3-letter prefix + 12 hex MAC). CSF/TCT/BOT/CSK
+            # encode a username (variable length). Anything else (CCX, CER,
+            # CTI, AN4) is out of scope for v1 — they're CTI ports or gateway
+            # analog phones, conceptually different from "phone endpoints"
+            # and modeled separately.
+            prefix = device_name[:3] if len(device_name) >= 3 else ""
+            kind = self._PHONE_KINDS_BY_PREFIX.get(prefix)
+            if kind is None:
+                skipped_non_phone += 1
                 continue
-            mac = device_name.removeprefix("SEP").lower()
-            mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
+
+            mac_formatted = None
+            if kind in ("sep", "ata") and len(device_name) == 15:
+                # Hardware endpoints: trailing 12 chars = MAC. Format as
+                # canonical aa:bb:cc:dd:ee:ff for storage.
+                mac = device_name[3:].lower()
+                mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
             sep_devices.append((device_name, phone_row))
 
             ip = self._ip_map.get(device_name) or None
@@ -326,9 +346,10 @@ class CUCMSourceAdapter(Adapter):
             extras["axl_model"] = axl_model  # stash for post-sync device-creation
 
             self.add(self.phone(
-                mac_address=mac_formatted,
-                phone_system__name=ps_name,
                 device_name=device_name,
+                phone_system__name=ps_name,
+                mac_address=mac_formatted,
+                device_kind=kind,
                 description=_get(phone_row, "description", "") or "",
                 registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
                 last_registered_ip=ip,
@@ -383,8 +404,8 @@ class CUCMSourceAdapter(Adapter):
                     ring_setting=_get(line, "ringSetting", "") or "",
                 ))
 
-        if skipped_non_sep and self.job:
-            self.job.logger.info(f"Skipped {skipped_non_sep} non-SEP phone records (softphones/CTI ports)")
+        if skipped_non_phone and self.job:
+            self.job.logger.info(f"Skipped {skipped_non_phone} non-phone records (CTI ports, gateway-attached analog phones — modeled separately)")
 
         # Optional second-phase: per-phone getPhone to populate line membership.
         # Slow — ~200-400ms per call, so this is off by default.

@@ -106,9 +106,11 @@ class PhoneModel(NautobotModel):
 
     _model = models.Phone
     _modelname = "phone"
-    _identifiers = ("mac_address", "phone_system__name")
+    # device_name is the canonical CCM identifier across all device types.
+    # mac_address is optional (only SEP/ATA have one) — moved to attributes.
+    _identifiers = ("device_name", "phone_system__name")
     _attributes = (
-        "device_name", "description",
+        "mac_address", "device_kind", "description",
         "registration_status", "last_registered_ip",
         "ccm_location", "network_location",
         # Device Information
@@ -126,9 +128,10 @@ class PhoneModel(NautobotModel):
         "vendor_extras",
     )
 
-    mac_address: str
-    phone_system__name: str
     device_name: str
+    phone_system__name: str
+    mac_address: Optional[str] = None
+    device_kind: str = "sep"
     description: str = ""
     registration_status: str = "unknown"
     last_registered_ip: Optional[str] = None

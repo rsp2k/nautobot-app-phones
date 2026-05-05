@@ -8,7 +8,7 @@ DirectoryNumber.
 from django.db import models
 from nautobot.apps.models import BaseModel, MACAddressCharField, PrimaryModel
 
-from nautobot_phones.choices import RegistrationStatusChoices
+from nautobot_phones.choices import PhoneDeviceKindChoices, RegistrationStatusChoices
 
 
 class Phone(PrimaryModel):
@@ -34,10 +34,20 @@ class Phone(PrimaryModel):
     # ---- Identity ------------------------------------------------------------
     device_name = models.CharField(
         max_length=100,
-        help_text="Vendor-side device name (e.g. 'SEP001122334455' on CCM).",
+        help_text="Vendor-side device name. CCM convention: SEP<MAC> for IP phones, "
+                  "CSF<username> for Jabber desktop, TCT<username> for Jabber iOS, "
+                  "BOT<username> for Jabber Android, ATA<MAC> for ATAs.",
+    )
+    device_kind = models.CharField(
+        max_length=16,
+        choices=PhoneDeviceKindChoices,
+        default=PhoneDeviceKindChoices.SEP,
+        help_text="Endpoint type — derived from CCM device_name prefix at sync time.",
     )
     mac_address = MACAddressCharField(
-        help_text="Device MAC. Required by CCM; usually set on FreePBX devices too.",
+        null=True, blank=True,
+        help_text="Device MAC (only present for SEP and ATA). Jabber softphones "
+                  "don't have a MAC since they're software endpoints.",
     )
     description = models.CharField(
         max_length=200,
@@ -145,13 +155,16 @@ class Phone(PrimaryModel):
         help_text="Long-tail CCM fields + axl_model (used by device-creation pass).",
     )
 
-    natural_key_field_names = ["phone_system", "mac_address"]
+    # CCM uses device_name as the canonical identifier across all phone types
+    # (SEP+MAC for physical, CSF+username for Jabber, etc.). MAC is only present
+    # for hardware endpoints, so we key on (phone_system, device_name) instead.
+    natural_key_field_names = ["phone_system", "device_name"]
 
     class Meta:
         """Meta options for Phone."""
 
         ordering = ("phone_system", "device_name")
-        unique_together = (("phone_system", "mac_address"),)
+        unique_together = (("phone_system", "device_name"),)
 
     def __str__(self) -> str:
         """Display string."""

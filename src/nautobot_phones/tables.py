@@ -129,6 +129,7 @@ class PhoneTable(BaseTable):
 
     pk = ToggleColumn()
     device_name = tables.LinkColumn()
+    device_kind = tables.Column(verbose_name="Kind")
     mac_address = tables.Column()
     # `model` and `physical_location` are @property accessors on Phone (read
     # through device.device_type.model and device.location). Non-sortable
@@ -147,13 +148,13 @@ class PhoneTable(BaseTable):
     class Meta(BaseTable.Meta):
         model = models.Phone
         fields = (
-            "pk", "device_name", "mac_address", "model", "description",
+            "pk", "device_name", "device_kind", "mac_address", "model", "description",
             "phone_system", "physical_location", "ccm_location",
             "device_pool", "owner_user_id",
             "registration_status", "last_registered_ip", "actions",
         )
         default_columns = (
-            "pk", "device_name", "description", "mac_address", "model",
+            "pk", "device_name", "device_kind", "description", "mac_address", "model",
             "phone_system", "ccm_location", "device_pool",
             "last_registered_ip", "actions",
         )

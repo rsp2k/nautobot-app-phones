@@ -15,6 +15,7 @@ from nautobot.apps.forms import NautobotFilterForm, NautobotModelForm
 from nautobot_phones import models
 from nautobot_phones.choices import (
     AnalogGatewayProtocolChoices,
+    PhoneDeviceKindChoices,
     RegistrationStatusChoices,
     TrunkTypeChoices,
     VendorChoices,
@@ -166,7 +167,7 @@ class PhoneForm(NautobotModelForm):
         model = models.Phone
         fields = (
             # Identity
-            "device_name", "mac_address", "description", "phone_system", "device",
+            "device_name", "device_kind", "mac_address", "description", "phone_system", "device",
             "registration_status", "last_registered_ip",
             "ccm_location", "network_location",
             # Device Information
@@ -189,8 +190,9 @@ class PhoneFilterForm(NautobotFilterForm):
     """Filter sidebar form for Phone list view."""
 
     model = models.Phone
-    field_order = ("q", "device_name", "mac_address", "phone_system", "registration_status", "device_pool", "owner_user_id", "ccm_location")
+    field_order = ("q", "device_name", "device_kind", "mac_address", "phone_system", "registration_status", "device_pool", "owner_user_id", "ccm_location")
     q = forms.CharField(required=False, label="Search")
+    device_kind = forms.MultipleChoiceField(choices=PhoneDeviceKindChoices, required=False, label="Device Kind")
     registration_status = forms.MultipleChoiceField(choices=RegistrationStatusChoices, required=False)
 
 
