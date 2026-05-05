@@ -94,7 +94,17 @@ class CUCMSourceAdapter(Adapter):
     # something concrete to point partition-less DNs/patterns at.
     NULL_PARTITION_NAME = "(none)"
 
-    def __init__(self, *args, client, phone_system_record, job=None, enrich_phone_lines=False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        client,
+        phone_system_record,
+        ris_client=None,
+        job=None,
+        enrich_phone_lines=False,
+        enrich_phone_ip=False,
+        **kwargs,
+    ):
         """Take a configured AXLClient and the PhoneSystem record it belongs to.
 
         `phone_system_record` is the Nautobot PhoneSystem ORM instance —
@@ -109,9 +119,14 @@ class CUCMSourceAdapter(Adapter):
         """
         super().__init__(*args, **kwargs)
         self.client = client
+        self.ris_client = ris_client
         self.phone_system_record = phone_system_record
         self.job = job
         self.enrich_phone_lines = enrich_phone_lines
+        self.enrich_phone_ip = enrich_phone_ip
+        # Populated by _fetch_ris_data when enrich_phone_ip=True; map of
+        # CUCM device-name (e.g. "SEPCAFEBABE0001") to IP address string.
+        self._ip_map: dict[str, str] = {}
 
     def _resolve_partition(self, ref: Any) -> str:
         """Pull the partition name out of a routePartitionName ref.
@@ -146,6 +161,8 @@ class CUCMSourceAdapter(Adapter):
         self._load_partitions(ps.name)
         self._load_calling_search_spaces(ps.name)
         self._load_directory_numbers(ps.name)
+        if self.enrich_phone_ip and self.ris_client is not None:
+            self._fetch_ris_data()
         self._load_phones_and_lines(ps.name)
         self._load_trunks(ps.name)
         self._load_route_lists(ps.name)
@@ -208,12 +225,14 @@ class CUCMSourceAdapter(Adapter):
             mac_formatted = ":".join(mac[i:i + 2] for i in range(0, len(mac), 2))
             sep_devices.append((device_name, phone_row))
 
+            ip = self._ip_map.get(device_name) or None
             self.add(self.phone(
                 mac_address=mac_formatted,
                 phone_system__name=ps_name,
                 device_name=device_name,
                 model=_get(phone_row, "model", "") or "",
                 registration_status=_get(phone_row, "currentRegistrationStatus", "unknown") or "unknown",
+                last_registered_ip=ip,
                 vendor_extras=_extract_extras(phone_row, exclude={"name", "model", "currentRegistrationStatus"}),
             ))
 
@@ -243,6 +262,29 @@ class CUCMSourceAdapter(Adapter):
         # Slow — ~200-400ms per call, so this is off by default.
         if self.enrich_phone_lines:
             self._enrich_lines(ps_name, sep_devices)
+
+    def _fetch_ris_data(self) -> None:
+        """Pull live registration/IP data from RisPort70 into _ip_map.
+
+        Single bulk call (auto-paginated) — much cheaper than per-phone
+        getPhone. Only used when enrich_phone_ip=True. Errors are logged
+        but non-fatal: phones just keep their IP=None.
+        """
+        if self.job:
+            self.job.logger.info("Fetching live registration data from RisPort70...")
+        try:
+            devices = self.ris_client.select_phones(status="Any")
+        except Exception as e:  # noqa: BLE001
+            if self.job:
+                self.job.logger.warning(f"  RisPort fetch failed: {type(e).__name__}: {e}")
+            return
+        for dev in devices:
+            ip = (dev.get("ip_address") or "").strip()
+            name = dev.get("name") or ""
+            if name and ip:
+                self._ip_map[name] = ip
+        if self.job:
+            self.job.logger.info(f"  RisPort returned {len(self._ip_map)} phones with IPs")
 
     def _enrich_lines(self, ps_name: str, sep_devices: list) -> None:
         """Walk each SEP* phone via getPhone to pull its lines + DN refs."""

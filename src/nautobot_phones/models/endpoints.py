@@ -57,6 +57,12 @@ class Phone(PrimaryModel):
         choices=RegistrationStatusChoices,
         default=RegistrationStatusChoices.UNKNOWN,
     )
+    last_registered_ip = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name="Last Registered IP",
+        help_text="IP address from the most recent RisPort70 registration record.",
+    )
     vendor_extras = models.JSONField(
         default=dict,
         blank=True,

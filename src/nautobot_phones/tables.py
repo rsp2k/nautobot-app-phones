@@ -129,8 +129,8 @@ class PhoneTable(BaseTable):
 
     class Meta(BaseTable.Meta):
         model = models.Phone
-        fields = ("pk", "device_name", "mac_address", "model", "phone_system", "location", "registration_status", "actions")
-        default_columns = ("pk", "device_name", "mac_address", "model", "phone_system", "registration_status", "actions")
+        fields = ("pk", "device_name", "mac_address", "model", "phone_system", "location", "registration_status", "last_registered_ip", "actions")
+        default_columns = ("pk", "device_name", "mac_address", "model", "phone_system", "registration_status", "last_registered_ip", "actions")
 
 
 class TrunkTable(BaseTable):

@@ -70,7 +70,7 @@ class DIDAssignmentSerializer(NautobotModelSerializer):
 class PhoneSerializer(NautobotModelSerializer):
     class Meta:
         model = models.Phone
-        fields = "__all__"
+        fields = "__all__"  # picks up last_registered_ip automatically
 
 
 class LineSerializer(NautobotModelSerializer):

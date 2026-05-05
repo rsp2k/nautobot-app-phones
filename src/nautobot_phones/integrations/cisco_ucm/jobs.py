@@ -27,6 +27,7 @@ from nautobot_ssot.jobs.base import DataSource
 from nautobot_phones.diffsync.adapters.nautobot import PhonesNautobotAdapter
 from nautobot_phones.integrations.cisco_ucm.adapter import CUCMSourceAdapter
 from nautobot_phones.integrations.cisco_ucm.client import AXLClient
+from nautobot_phones.integrations.cisco_ucm.risport import RISClient
 from nautobot_phones.models import PhoneSystem
 
 
@@ -51,6 +52,13 @@ class CUCMDataSource(DataSource):
         description=(
             "Pull per-phone line membership via getPhone. Slow — adds ~200-400ms "
             "per phone (5-10 min for 1000+ phones). Off by default."
+        ),
+    )
+    enrich_phone_ip = BooleanVar(
+        default=False,
+        description=(
+            "Pull live IP addresses + registration status via RisPort70. Single "
+            "bulk call (paginated), typically a few seconds. Cheap; recommended."
         ),
     )
 
@@ -88,12 +96,20 @@ class CUCMDataSource(DataSource):
             version=os.environ.get("AXL_VERSION", "15.0"),
             verify_tls=self.verify_tls,
         )
+        ris_client = RISClient(
+            host=ps.hostname,
+            username=username,
+            password=password,
+            verify_tls=self.verify_tls,
+        ) if self.enrich_phone_ip else None
         self.source_adapter = CUCMSourceAdapter(
             client=client,
+            ris_client=ris_client,
             phone_system_record=ps,
             job=self,
             sync=self.sync,
             enrich_phone_lines=self.enrich_phone_lines,
+            enrich_phone_ip=self.enrich_phone_ip,
         )
         self.source_adapter.load()
 
