@@ -252,9 +252,9 @@ def _ensure_ip_address(ip_str: str) -> IPAddress:
 #
 # Unlike Phones (where CCM device-name encodes the chassis MAC), CCM gateway
 # names are operator-chosen and rarely match the network hostname. For
-# Lab, CCM has SKIGW4FB1F0C501 but DCIM has BH01-R00-ANALOG-GW. So we
-# can't rely on a single matching strategy — try several in order, log
-# unmatched gateways for operator action.
+# example, CCM might call a gateway `SITE-GW-001` while DCIM has it as
+# `RACK-R00-ANALOG-GW`. We can't rely on a single matching strategy —
+# try several in order, log unmatched gateways for operator action.
 
 def enrich_analog_gateway_devices(*, logger=None) -> dict:
     """Match each AnalogGateway to an existing dcim.Device.
@@ -273,8 +273,9 @@ def enrich_analog_gateway_devices(*, logger=None) -> dict:
 
       3. **Unique DeviceType in PhoneSystem location**: if the gateway's
          model (e.g. VG450) matches exactly one Device of that DeviceType
-         in the PhoneSystem's Location, link it. Catches the Lab case
-         where there's exactly one VG450 in the campus.
+         in the PhoneSystem's Location, link it. Catches single-gateway
+         deployments where exactly one chassis of the model exists at
+         the cluster's site.
 
     Operators can always override by setting AnalogGateway.device manually
     in the UI; once linked, this pass leaves it alone.
@@ -356,9 +357,10 @@ def enrich_analog_gateway_devices(*, logger=None) -> dict:
 def _extract_chassis_mac_base(ccm_name: str) -> str:
     """Extract the chassis MAC base from a CCM gateway name.
 
-    CCM gateway-naming convention seen at Lab: <SITE>GW<base-mac><01>
-    where base-mac is the 4-byte chassis MAC (8 hex chars) and '01' is a
-    constant unit-marker suffix. For SKIGW4FB1F0C501 this yields '4FB1F0C5'.
+    Common CCM gateway-naming convention: ``<SITE>GW<base-mac><01>``
+    where ``base-mac`` is the 4-byte chassis MAC (8 hex chars) and ``01``
+    is a constant unit-marker suffix. For a name like ``HQGW4ABC0DEF01``
+    this yields ``4ABC0DEF`` as the MAC base.
 
     Returns empty string when the name doesn't match the expected shape —
     callers fall through to other matching strategies.
@@ -380,8 +382,8 @@ def _extract_chassis_mac_base(ccm_name: str) -> str:
 def _decode_voice_port_name(port_index: int) -> str:
     """Decode CCM AN4 port encoding into Cisco IOS voice-port slot/subslot/port.
 
-    Empirical decoding from the Lab VG450 audit
-    (~/lab/docs/dist/audits/2026-04-27-vg450-rejected-endpoints):
+    Empirical decoding (verified against multiple VG450 chassis
+    running-configs and audit-published port mapping tables):
 
         bits 9-11  → slot
         bit 8      → sub-slot

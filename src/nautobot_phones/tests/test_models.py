@@ -28,8 +28,8 @@ class TestPhoneSystem(TestCase):
         self.assertEqual(ps.vendor, "cisco_ucm")
 
     def test_str(self) -> None:
-        ps = factories.PhoneSystemFactory(name="LAB-CCM")
-        self.assertEqual(str(ps), "LAB-CCM")
+        ps = factories.PhoneSystemFactory(name="test-cluster-1")
+        self.assertEqual(str(ps), "test-cluster-1")
 
     def test_name_must_be_unique(self) -> None:
         factories.PhoneSystemFactory(name="dupe")

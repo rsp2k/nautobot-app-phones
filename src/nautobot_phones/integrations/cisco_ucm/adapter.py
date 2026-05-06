@@ -790,7 +790,7 @@ class CUCMSourceAdapter(Adapter):
                 vendor_extras=extras,
             ))
             # Build suffix → name map for AN4 lookup. Gateway names follow
-            # convention <SITE>GW<MAC-suffix> (e.g. "SKIGW4FB1F0C501") and
+            # convention <SITE>GW<MAC-suffix> (e.g. "HQGW4ABC0DEF01") and
             # AN4 device names use the same suffix. Match by trailing 9 chars.
             if len(gw_name) >= 9:
                 gateways_by_suffix[gw_name[-9:].upper()] = gw_name

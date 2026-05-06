@@ -34,7 +34,7 @@ def _https_link(value):
 
 # Cisco RIS StatusReason code lookup. The codes are server-side
 # integers; humans need words. Source: empirical observation across the
-# lab cluster + Cisco doc cross-referencing. Unknown codes pass
+# real CCM clusters + Cisco doc cross-referencing. Unknown codes pass
 # through as the original numeric string.
 _RIS_STATUS_REASONS = {
     "0": "OK / no issue",
