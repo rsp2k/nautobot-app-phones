@@ -31,6 +31,72 @@ def _https_link(value):
         return value
     return format_html('<a href="https://{0}/" target="_blank" rel="noopener noreferrer">{0}</a>', value)
 
+
+# Cisco RIS StatusReason code lookup. The codes are server-side
+# integers; humans need words. Source: empirical observation across the
+# lab cluster + Cisco doc cross-referencing. Unknown codes pass
+# through as the original numeric string.
+_RIS_STATUS_REASONS = {
+    "0": "OK / no issue",
+    "1": "Unknown",
+    "2": "CallManager Initiated Reset/Restart",
+    "3": "Device Name not configured in CallManager",
+    "4": "Database Error",
+    "5": "Device closed connection",
+    "6": "Authentication failed",
+    "7": "Configuration mismatch",
+    "8": "Database operation failed",
+    "9": "Device unregistered",
+    "10": "Application closed",
+    "11": "Initialization error",
+    "12": "Device-pool error",
+    "13": "Capacity exceeded",
+}
+
+
+def _status_reason_human(value):
+    """Map a CCM RIS StatusReason code to its human-readable label.
+
+    Pass-through for empty/unrecognized values so the field still
+    surfaces something operators can investigate.
+    """
+    if value in (None, ""):
+        return "—"
+    label = _RIS_STATUS_REASONS.get(str(value))
+    if label is None:
+        return value
+    return f"{value} — {label}"
+
+
+def _vendor_extras_summary(value):
+    """Render a vendor_extras dict as a one-line key:value summary.
+
+    Replaces Nautobot's default ``{'a': 1, 'b': 2}`` Python-repr with
+    something readable. Lists of dicts (like AnalogGateway.module_units)
+    get expanded as semicolon-joined entries.
+    """
+    if not value or not isinstance(value, dict):
+        return value
+    parts = []
+    for k, v in sorted(value.items()):
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            entries = []
+            for item in v:
+                # Show subunit_product when present (most informative for
+                # analog gateway module summaries) — otherwise fall back
+                # to first-non-empty value.
+                preview = item.get("subunit_product") or next(
+                    (str(x) for x in item.values() if x), ""
+                )
+                idx_label = f"u{item.get('unit_index')}/s{item.get('subunit_index')}" if 'unit_index' in item else ""
+                entries.append(f"{idx_label} {preview}".strip())
+            parts.append(f"{k}: {' | '.join(entries)}")
+        elif isinstance(v, (list, dict)):
+            parts.append(f"{k}: <{type(v).__name__} of {len(v)}>")
+        else:
+            parts.append(f"{k}: {v}")
+    return format_html("<code>{}</code>", "  ·  ".join(parts))
+
 from nautobot_phones import filters, forms, models, tables
 
 
@@ -201,7 +267,7 @@ class DirectoryNumberUIViewSet(NautobotUIViewSet):
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,
                 table_class=tables.LineTable, table_filter="directory_number",
-                table_title="Lines (phone-button appearances)", exclude_columns=["directory_number"],
+                table_title="Line Appearances", exclude_columns=["directory_number"],
             ),
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=200,
@@ -291,7 +357,10 @@ class PhoneUIViewSet(NautobotUIViewSet):
                     "live_login_user", "status_reason",
                     "last_registered_ip", "live_status_polled_at",
                 ],
-                value_transforms={"last_registered_ip": [_https_link]},
+                value_transforms={
+                    "last_registered_ip": [_https_link],
+                    "status_reason": [_status_reason_human],
+                },
             ),
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=200,
@@ -319,7 +388,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,
                 table_class=tables.LineTable, table_filter="phone",
-                table_title="Lines (phone buttons)", exclude_columns=["phone"],
+                table_title="Lines", exclude_columns=["phone"],
                 order_by_fields=["button_index"],
             ),
             ObjectsTablePanel(
@@ -528,7 +597,8 @@ class AnalogGatewayUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["name", "phone_system", "location", "device", "model", "protocol"],
+                fields=["name", "phone_system", "location", "device", "model", "protocol", "vendor_extras"],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
             ),
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,
