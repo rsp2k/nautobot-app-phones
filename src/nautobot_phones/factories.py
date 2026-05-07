@@ -95,7 +95,13 @@ class DIDFactory(DjangoModelFactory):
 
 
 class PhoneFactory(DjangoModelFactory):
-    """Default: a Cisco-style SEP… device name + sequential MAC."""
+    """Default: a Cisco-style SEP… device name + sequential MAC.
+
+    `Phone.model` is a `@property` reading from `device.device_type.model`,
+    so the factory can't set it. The CCM model string lives in
+    `vendor_extras['axl_model']` (where the device-creation pass picks
+    it up to find/create the right DeviceType).
+    """
 
     class Meta:
         model = models.Phone
@@ -104,9 +110,9 @@ class PhoneFactory(DjangoModelFactory):
     mac_address = factory.Sequence(
         lambda n: f"00:11:22:{(n >> 16) & 0xFF:02X}:{(n >> 8) & 0xFF:02X}:{n & 0xFF:02X}"
     )
-    model = "CP-8851"
     phone_system = factory.SubFactory(PhoneSystemFactory)
     registration_status = RegistrationStatusChoices.UNKNOWN
+    vendor_extras = factory.LazyFunction(lambda: {"axl_model": "CP-8851"})
 
 
 class LineFactory(DjangoModelFactory):

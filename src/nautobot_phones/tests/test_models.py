@@ -153,24 +153,52 @@ class TestDIDAssignment(TestCase):
 
 
 class TestPhone(TestCase):
-    """Phones are unique by (phone_system, mac_address)."""
+    """Phones are unique by (phone_system, device_name).
+
+    Pre-softphone: uniqueness was (phone_system, mac_address). Softphones
+    have no MAC, so we switched to device_name as the canonical CCM
+    identifier shared across SEP/CSF/TCT/BOT/CSK/ATA prefixes.
+    """
 
     def test_create(self) -> None:
         phone = factories.PhoneFactory()
         self.assertIsNotNone(phone.pk)
 
-    def test_same_mac_in_different_systems_ok(self) -> None:
+    def test_same_device_name_in_different_systems_ok(self) -> None:
         ps1 = factories.PhoneSystemFactory()
         ps2 = factories.PhoneSystemFactory()
-        factories.PhoneFactory(mac_address="00:11:22:33:44:55", phone_system=ps1)
-        # Same MAC OK in a different cluster (rare in practice but allowed).
-        factories.PhoneFactory(mac_address="00:11:22:33:44:55", phone_system=ps2)
+        factories.PhoneFactory(device_name="SEPCAFEBABE0001", phone_system=ps1)
+        # Same device_name OK across clusters (rare in practice but allowed).
+        factories.PhoneFactory(device_name="SEPCAFEBABE0001", phone_system=ps2)
 
-    def test_same_mac_in_same_system_rejected(self) -> None:
+    def test_same_device_name_in_same_system_rejected(self) -> None:
         ps = factories.PhoneSystemFactory()
-        factories.PhoneFactory(mac_address="00:11:22:33:44:55", phone_system=ps)
+        factories.PhoneFactory(device_name="SEPCAFEBABE0001", phone_system=ps)
         with self.assertRaises(IntegrityError):
-            factories.PhoneFactory(mac_address="00:11:22:33:44:55", phone_system=ps)
+            factories.PhoneFactory(device_name="SEPCAFEBABE0001", phone_system=ps)
+
+    def test_softphone_with_no_mac_allowed(self) -> None:
+        """CSF/TCT/BOT softphones have no MAC. The optional field allows None."""
+        ps = factories.PhoneSystemFactory()
+        phone = factories.PhoneFactory(
+            device_name="CSFJDOE", mac_address=None, device_kind="csf",
+            phone_system=ps,
+        )
+        self.assertIsNone(phone.mac_address)
+        self.assertEqual(phone.device_kind, "csf")
+
+    def test_model_property_reads_from_device(self) -> None:
+        """Phone.model is a property — when no Device is linked, falls
+        back to vendor_extras['axl_model']."""
+        phone = factories.PhoneFactory(vendor_extras={"axl_model": "CP-8851"})
+        # No Device linked → property reads from vendor_extras
+        self.assertEqual(phone.model, "CP-8851")
+
+    def test_location_property_with_no_device(self) -> None:
+        """Phone.location is a property that reads through linked Device.
+        When no Device, returns None."""
+        phone = factories.PhoneFactory()
+        self.assertIsNone(phone.location)
 
 
 class TestLine(TestCase):
