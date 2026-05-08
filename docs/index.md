@@ -22,7 +22,7 @@ call-routing config. Nautobot is where the rest of your network lives
 - "Which translation patterns block calls from spammer numbers?"
 - "What's the patch-panel cable to receptionist Jane's analog phone?"
 
-…without RDP'ing into 1000+ phones or scraping CCM admin pages.
+…without polling 1000+ phone web admin pages or scraping CCM admin screens.
 
 ## Documentation
 
