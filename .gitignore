@@ -29,3 +29,6 @@ htmlcov/
 
 # Audit / scratch
 audits/
+
+# mkdocs build output (bundled into the wheel via package-data, regenerated on build)
+src/nautobot_phones/static/nautobot_phones/docs/

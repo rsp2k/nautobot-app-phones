@@ -1,0 +1,18 @@
+/* Custom CSS for nautobot-app-phones docs */
+
+/* Slightly larger code font in the body */
+.md-typeset code,
+.md-typeset pre {
+  font-size: 0.85rem;
+}
+
+/* Compact admonitions */
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.8rem;
+}
+
+/* Make table headers stand out a little more */
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+}
