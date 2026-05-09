@@ -141,6 +141,10 @@ services:
     networks:
       - internal
       - caddy
+      # freepbx-net membership lets the FreePBX SSoT job reach
+      # `freepbx-mariadb` via Docker DNS for trunks + outbound-routes
+      # DB-direct queries (the api module's GraphQL doesn't expose them).
+      - freepbx-net
     labels:
       caddy: ${DOMAIN}
       caddy.reverse_proxy: "{{upstreams 8080}}"
@@ -155,6 +159,7 @@ services:
     command: ["nautobot-server", "celery", "worker", "-l", "INFO"]
     networks:
       - internal
+      - freepbx-net
 
   # ---------------------------------------------------------------------------
   # FreePBX 17 dev container (Phase 5 — second-vendor adapter target).

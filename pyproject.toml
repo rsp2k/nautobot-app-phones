@@ -46,6 +46,10 @@ cisco_ucm = [
 ]
 freepbx = [
     "httpx>=0.27,<1",
+    # pymysql is for the DB-direct fallback path used when FreePBX's `api`
+    # module hasn't yet exposed a resource via GraphQL (currently: trunks,
+    # outbound routes). Read-only SELECT queries against MariaDB only.
+    "pymysql>=1.1,<2",
 ]
 docs = [
     "mkdocs-material>=9.5,<10",

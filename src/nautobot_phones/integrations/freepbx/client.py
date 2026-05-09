@@ -34,7 +34,8 @@ Raises:
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional
 
 import httpx
 
@@ -70,6 +71,11 @@ class FreePBXClient:
         client_secret: str,
         verify_tls: bool = True,
         timeout: int = 30,
+        db_host: Optional[str] = None,
+        db_port: int = 3306,
+        db_user: Optional[str] = None,
+        db_password: Optional[str] = None,
+        db_name: str = "asterisk",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
@@ -77,6 +83,16 @@ class FreePBXClient:
         self._http = httpx.Client(verify=verify_tls, timeout=timeout)
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
+        # MariaDB direct-query support — required for trunks + outbound routes
+        # which aren't (yet) exposed via the api module's GraphQL schema. All
+        # queries are SELECT-only; we never write through this connection.
+        # Disabled if db_host is None — the adapter falls back to empty
+        # results and logs a warning.
+        self.db_host = db_host
+        self.db_port = db_port
+        self.db_user = db_user
+        self.db_password = db_password
+        self.db_name = db_name
 
     def __enter__(self) -> "FreePBXClient":
         return self
@@ -193,20 +209,115 @@ class FreePBXClient:
         return wrapper.get("extension") or []
 
     def list_trunks(self) -> list[dict]:
-        """Fetch all trunks.
+        """Fetch all trunks via direct MariaDB query.
 
-        STUB — trunks aren't exposed via the api module's default schema in
-        17.0.6; they require the `outroutes`/`trunks` API extensions which
-        ship as separate modules. Stage-5 work.
+        FreePBX 17's `api` module 17.0.6 doesn't expose trunks in its
+        GraphQL schema, but the data lives in the well-known `trunks`
+        table that's been stable since FreePBX 13. Read-only SELECT —
+        the adapter never writes through this connection.
+
+        Returns one dict per trunk with: trunkid, tech (sip/pjsip/iax2/
+        dahdi), name, outcid, disabled (bool), provider, channelid.
         """
-        return []
+        if not self.db_host:
+            return []
+        with self._db_cursor() as cur:
+            cur.execute(
+                "SELECT trunkid, tech, channelid, name, outcid, "
+                "       (CASE WHEN disabled = 'on' THEN 1 ELSE 0 END) AS disabled, "
+                "       provider, maxchans, dialoutprefix "
+                "FROM trunks "
+                "ORDER BY trunkid"
+            )
+            cols = [c[0] for c in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
 
     def list_outbound_routes(self) -> list[dict]:
-        """Fetch all outbound routes.
+        """Fetch all outbound routes + their patterns + trunk-priority list.
 
-        STUB — see ``list_trunks`` note. Stage-5 work.
+        Three-table join: outbound_routes (the route metadata),
+        outbound_route_patterns (one row per dial pattern), and
+        outbound_route_trunks (the trunk-priority list per route).
+
+        Returned shape (one dict per route):
+
+            {
+              "route_id": int,
+              "name": str,
+              "outcid": str | None,
+              "patterns": [{"prefix": str, "match": str, "prepend": str}, ...],
+              "trunk_seq": [(seq, trunk_id), ...],   # ordered by seq asc
+            }
         """
-        return []
+        if not self.db_host:
+            return []
+        with self._db_cursor() as cur:
+            # Routes
+            cur.execute(
+                "SELECT route_id, name, outcid, emergency_route, intracompany_route "
+                "FROM outbound_routes ORDER BY route_id"
+            )
+            cols = [c[0] for c in cur.description]
+            routes = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            # Patterns for all routes — single query, group in Python
+            cur.execute(
+                "SELECT route_id, match_pattern_prefix AS prefix, "
+                "       match_pattern_pass AS match_pattern, "
+                "       prepend_digits AS prepend "
+                "FROM outbound_route_patterns ORDER BY route_id, match_pattern_prefix"
+            )
+            patcols = [c[0] for c in cur.description]
+            patterns_by_route: dict[int, list[dict]] = {}
+            for row in cur.fetchall():
+                pat = dict(zip(patcols, row))
+                patterns_by_route.setdefault(pat["route_id"], []).append(pat)
+
+            # Trunk priority list per route
+            cur.execute(
+                "SELECT route_id, trunk_id, seq FROM outbound_route_trunks "
+                "ORDER BY route_id, seq"
+            )
+            tcols = [c[0] for c in cur.description]
+            trunks_by_route: dict[int, list[tuple[int, int]]] = {}
+            for row in cur.fetchall():
+                d = dict(zip(tcols, row))
+                trunks_by_route.setdefault(d["route_id"], []).append((d["seq"], d["trunk_id"]))
+
+        for r in routes:
+            r["patterns"] = patterns_by_route.get(r["route_id"], [])
+            r["trunk_seq"] = trunks_by_route.get(r["route_id"], [])
+        return routes
+
+    @contextmanager
+    def _db_cursor(self) -> Iterator[Any]:
+        """Yield a SELECT-only DB cursor. Lazy-imports pymysql.
+
+        We don't make pymysql a hard dependency of the package since the
+        GraphQL-only path is the recommended production pattern. The DB
+        path is for resources FreePBX hasn't exposed via API yet.
+        """
+        try:
+            import pymysql
+        except ImportError as e:
+            raise RuntimeError(
+                "FreePBX trunk/route loading requires the `pymysql` package — "
+                "add it to your environment to enable DB-direct loading, "
+                "or wait for FreePBX to expose these resources via GraphQL."
+            ) from e
+        conn = pymysql.connect(
+            host=self.db_host, port=self.db_port,
+            user=self.db_user, password=self.db_password,
+            database=self.db_name, charset="utf8mb4",
+        )
+        try:
+            cur = conn.cursor()
+            try:
+                yield cur
+            finally:
+                cur.close()
+        finally:
+            conn.close()
 
 
 def _safe_get(d: dict, *keys: str) -> Any:

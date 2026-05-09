@@ -89,11 +89,40 @@ class FreePBXDataSource(DataSource):
             SecretsGroupSecretTypeChoices.TYPE_PASSWORD,
         )
 
+        # Optional DB-direct config for resources FreePBX's api module
+        # doesn't expose via GraphQL (trunks, outbound routes). Pulled
+        # from PhoneSystem.vendor_extras["freepbx_db"] = {"host", "port",
+        # "name"} plus a DATABASE-access-type slot in the SecretsGroup.
+        db_cfg = (ps.vendor_extras or {}).get("freepbx_db") or {}
+        db_host = db_cfg.get("host")
+        db_user, db_password = None, None
+        if db_host:
+            try:
+                db_user = ps.secrets_group.get_secret_value(
+                    SecretsGroupAccessTypeChoices.TYPE_DATABASE,
+                    SecretsGroupSecretTypeChoices.TYPE_USERNAME,
+                )
+                db_password = ps.secrets_group.get_secret_value(
+                    SecretsGroupAccessTypeChoices.TYPE_DATABASE,
+                    SecretsGroupSecretTypeChoices.TYPE_PASSWORD,
+                )
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning(
+                    "freepbx_db is configured but DB credentials missing from "
+                    "SecretsGroup — trunks + outbound routes will be empty. (%s)", e,
+                )
+                db_host = None
+
         client = FreePBXClient(
             base_url=base_url,
             client_id=client_id,
             client_secret=client_secret,
             verify_tls=self.verify_tls,
+            db_host=db_host,
+            db_port=db_cfg.get("port", 3306),
+            db_user=db_user,
+            db_password=db_password,
+            db_name=db_cfg.get("name", "asterisk"),
         )
         self.source_adapter = FreePBXSourceAdapter(
             client=client,
