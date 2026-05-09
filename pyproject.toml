@@ -54,6 +54,12 @@ freepbx = [
 docs = [
     "mkdocs-material>=9.5,<10",
     "mkdocs-include-markdown-plugin>=6.2,<8",
+    # Auto-generated API reference from docstrings.
+    "mkdocstrings[python]>=0.26,<1",
+    # Image lightbox for screenshots in user/admin guides.
+    "mkdocs-glightbox>=0.4,<1",
+    # `+++ "X.Y" New in version` admonitions — Nautobot docs convention.
+    "markdown-version-annotations>=1.0,<2",
 ]
 all = [
     "nautobot-app-phones[cisco_ucm,freepbx]",

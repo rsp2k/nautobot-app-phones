@@ -15,20 +15,8 @@ The client here:
     stable across betas.
 
 This is intentionally minimal — the adapter does the heavy lifting of
-mapping FreePBX records into our DiffSync models.
-
-Parameters:
-    base_url: Origin URL of the FreePBX admin (no trailing slash).
-        Example: ``"http://freepbx"`` (Docker DNS) or ``"https://pbx.example.com"``.
-    client_id: OAuth2 application client_id (from FreePBX Admin > API > Applications).
-    client_secret: OAuth2 application client_secret.
-    verify_tls: Verify the FreePBX TLS cert. Default True; disable for
-        self-signed dev installs (the dev container uses HTTP anyway).
-    timeout: Per-request timeout in seconds.
-
-Raises:
-    FreePBXAuthError: Token acquisition failed (bad credentials / scopes).
-    FreePBXAPIError: GraphQL endpoint returned an error response.
+mapping FreePBX records into our DiffSync models. See ``FreePBXClient``
+below for full constructor parameter docs.
 """
 
 from __future__ import annotations

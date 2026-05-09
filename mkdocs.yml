@@ -57,6 +57,7 @@ markdown_extensions:
       permalink: true
   - "attr_list"
   - "md_in_html"
+  - "meta"
   - "pymdownx.details"
   - "pymdownx.highlight":
       anchor_linenums: true
@@ -69,10 +70,38 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - "footnotes"
   - "tables"
+  # `+++ "X.Y" New in version` callout blocks — canonical Nautobot
+  # docs convention for noting which release added a feature.
+  - "markdown_version_annotations":
+      admonition_tag: "???"
+  - "pymdownx.blocks.caption"
 
 plugins:
   - "search"
   - "include-markdown"
+  # Auto-generated API reference from docstrings. The dev/code_reference/
+  # pages drive what's rendered.
+  - "mkdocstrings":
+      default_handler: "python"
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            show_root_heading: true
+            show_source: false
+            show_signature_annotations: true
+            members_order: "source"
+  # Image lightbox for screenshots — clicking opens full-size.
+  - "glightbox"
+
+# Catch broken refs at build time. `omitted_files` warns when a file
+# in docs/ isn't referenced from nav. `unrecognized_links` and
+# `anchors` catch typos in cross-page links.
+validation:
+  omitted_files: "warn"
+  absolute_links: "warn"
+  unrecognized_links: "warn"
+  anchors: "warn"
 
 watch:
   - "README.md"
@@ -84,6 +113,7 @@ nav:
     - "Use Cases": "user/use_cases.md"
     - "Sync Reference": "user/sync_reference.md"
     - "Models": "user/models.md"
+    - "External Interactions": "user/external_interactions.md"
     - "FAQ": "user/faq.md"
   - "Administrator Guide":
     - "Install": "admin/install.md"
@@ -97,4 +127,8 @@ nav:
     - "Development Environment": "dev/dev_environment.md"
     - "Architecture Decisions": "dev/architecture.md"
     - "Extending": "dev/extending.md"
+    - "Code Reference":
+      - "dev/code_reference/index.md"
+      - "Package": "dev/code_reference/package.md"
+      - "API": "dev/code_reference/api.md"
   - "Nautobot Docs Home ↗︎": "https://docs.nautobot.com"
