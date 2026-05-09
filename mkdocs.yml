@@ -3,7 +3,10 @@ dev_addr: "127.0.0.1:8001"
 edit_uri: "edit/main/docs"
 site_dir: "src/nautobot_phones/static/nautobot_phones/docs"
 site_name: "Nautobot Phones Documentation"
-repo_url: "https://git.supported.systems/nautobot-app-phones"
+# `repo_url` powers the "Edit this page" + "View source" links on every
+# page (rendered via `edit_uri` above). Pointing at GitHub since that's
+# what Read the Docs pulls from.
+repo_url: "https://github.com/rsp2k/nautobot-app-phones"
 copyright: "Copyright &copy; Ryan Malloy"
 
 theme:
@@ -85,7 +88,12 @@ plugins:
       default_handler: "python"
       handlers:
         python:
-          paths: ["."]
+          # `paths: ["src"]` lets griffe resolve `nautobot_phones.*` to
+          # src/nautobot_phones/ without needing the package installed.
+          # AST parsing only — no Django/Nautobot imports required, which
+          # keeps RTD builds fast (~10s vs the multi-minute cost of pulling
+          # in the framework).
+          paths: ["src"]
           options:
             show_root_heading: true
             show_source: false
@@ -163,6 +171,7 @@ nav:
     - "Compatibility Matrix": "admin/compatibility_matrix.md"
     - "Upgrade": "admin/upgrade.md"
     - "Uninstall": "admin/uninstall.md"
+    - "Publishing Docs": "admin/install_docs_site.md"
     - "Release Notes":
       - "admin/release_notes/index.md"
   - "Developer Guide":
