@@ -16,41 +16,81 @@ admin at `/admin/config.php` shows "Welcome to FreePBX Administration"
 and walks through a setup wizard. We can drive that wizard programmatically
 or bypass it.
 
-## Adapter API choice: GraphQL
+## Adapter API choice: GraphQL (CONFIRMED)
 
-FreePBX 17 exposes three API surfaces:
+The GraphQL endpoint is `POST /admin/api/api/gql` (note: `/gql`, not
+`/graphql` — the `genclientcred` command reports both URLs but only the
+`/gql` one actually serves; `/graphql` returns 403 even with a valid
+token). Auth is OAuth2 `client_credentials`.
 
-1. **Legacy REST** under `/admin/api/api/...` — XML, deprecated
-2. **GraphQL** at `/admin/api/api/graphql` — modern, schema-introspectable,
-   OAuth2 client-credentials auth (RECOMMENDED for adapter)
-3. **Direct DB** against MariaDB — last resort if GraphQL doesn't expose
-   what we need
+The `api` and `userman` modules need to be installed (run
+`make freepbx-bootstrap` — automated). Then `fwconsole api gql
+genclientcred <serverip>` mints OAuth2 credentials without going
+through the web setup wizard. **No admin-user creation needed** — the
+fwconsole CLI runs as root and bypasses the auth path entirely.
 
-GraphQL requires the "API" + "Application" modules from FreePBX module
-admin. Once installed, you create an Application that gets a
-`client_id` + `client_secret` for OAuth2 token requests.
+### Real schema field names (confirmed against 17.0.21 + api 17.0.6)
 
-## Seeding workflow (planned)
+Top-level query fields are prefixed `fetchAll*` or `all*`, NOT just `all*`:
 
-1. **Create admin user** — `fwconsole userman:addUser admin admin` or
-   complete web wizard once.
-2. **Install API + Application modules** via `fwconsole ma install api`
-   + `fwconsole ma install pm2` + `fwconsole ma install application`.
-3. **Create OAuth Application** in admin UI with scopes `read:extensions`,
-   `read:trunks`, `read:routes`. Capture `client_id` + `client_secret`
-   into `.env` as `FREEPBX_CLIENT_ID` / `FREEPBX_CLIENT_SECRET`.
-4. **Seed minimum test data** for adapter parity testing:
-   - 5 PJSIP extensions (e.g. 1001-1005 with display names)
-   - 1 SIP trunk pointing at a fictional ITSP
-   - 1 outbound route mapping `9NXXXXXXXXX` → trunk
-   - 1 ring group at extension 600 fanning to 1001+1002+1003
-   - 1 voicemail box on extension 1001
-5. **Verify GraphQL queries** return seeded records before writing
-   adapter code:
-   ```graphql
-   { allExtensions { extensionNumber displayName email } }
-   { allTrunks { name techType } }
-   ```
+  - `fetchAllExtensions` (not `allExtensions`)
+  - `fetchAllCoreDevices` — physical SIP peers (separate from extensions)
+  - `fetchVoiceMail` — voicemail boxes
+  - `allInboundRoutes`, `inboundRoute`
+  - `fetchAllRecordings`
+  - `allMusiconholds`
+
+The Extension type wraps a Connection-style envelope:
+
+```graphql
+fetchAllExtensions {
+  totalCount status message
+  extension {                  # <- lowercase, the actual list
+    id extensionId tech
+    user { extension name voicemail outboundCid ringtimer ... }
+    coreDevice { dial devicetype description emergencyCid }
+  }
+}
+```
+
+`coreDevice.dial` is `"PJSIP/1001"` etc. — exactly the device_name
+shape we want for our `Phone` records. FreePBX prepends the SIP
+technology to the extension number for us.
+
+### Trunks and outbound routes (NOT yet exposed)
+
+The default `api` module 17.0.6 doesn't include trunks or outbound-
+routes in its GraphQL schema. They require additional API modules
+(`outroutes`, `core-trunks`, etc.) that ship separately. Stage-5 work.
+
+## Bootstrap workflow (automated)
+
+1. `make freepbx-init` — generate Docker secrets from .env passwords
+2. `make freepbx-up` — start FreePBX + MariaDB containers
+3. `make freepbx-install` — `php install` to populate /var/www/html + DB
+4. `make freepbx-bootstrap` — install userman + api modules + generate
+   OAuth2 credentials (prints client_id + client_secret to stdout)
+5. Stash credentials in `.env` as `FREEPBX_LAB_CLIENT_ID` /
+   `FREEPBX_LAB_CLIENT_SECRET`, OR create a Nautobot SecretsGroup
+
+## Test-data seeding (manual, optional)
+
+Use the GraphQL `addExtension` mutation to seed test extensions:
+
+```graphql
+mutation {
+  addExtension(input: {
+    extensionId: "1001",
+    name: "Alice Engineering",
+    email: "alice@example.com",
+    tech: "pjsip",
+    outboundCid: "<5551001>"
+  }) { status message }
+}
+```
+
+For multi-extension seeds in stage 5+ we'll add a Makefile target that
+loops over a YAML/CSV of extensions to create.
 
 ## Mapping (FreePBX → Nautobot phones)
 

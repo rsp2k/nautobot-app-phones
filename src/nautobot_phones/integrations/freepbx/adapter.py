@@ -186,7 +186,7 @@ class FreePBXSourceAdapter(Adapter):
         ))
 
         # Stage 4: extensions → DirectoryNumber + Phone
-        # self._load_extensions(ps.name)
+        self._load_extensions(ps.name)
 
         # Stages 5+:
         # self._load_voicemail_profiles(ps.name)
@@ -198,10 +198,77 @@ class FreePBXSourceAdapter(Adapter):
     # -------------------------------------------- per-resource loaders
 
     def _load_extensions(self, ps_name: str) -> None:
-        """Fetch extensions, emit one DirectoryNumber + Phone per record.
+        """Walk fetchAllExtensions, emit one DirectoryNumber + Phone per record.
 
-        STUB — will be implemented in stage 4 once we have a seeded
-        FreePBX with API credentials and can confirm the actual GraphQL
-        response shape.
+        Mapping (FreePBX → unified):
+          - extensionId  → DirectoryNumber.extension
+          - user.name    → DirectoryNumber.alerting_name
+          - coreDevice.dial (e.g. "PJSIP/1001") → Phone.device_name
+          - tech (pjsip/sip/iax2/dahdi) → Phone.device_kind="other"
+            (we don't have FreePBX-specific values in PhoneDeviceKindChoices;
+            tech goes into vendor_extras for fidelity)
+          - user.outboundCid, voicemail status, ring/transfer destinations,
+            recording prefs → vendor_extras
+
+        FreePBX has no concept of partitions, so all DNs land under our
+        synthetic "(none)" partition. Operators querying "show me phones
+        in partition X" won't get FreePBX results, which is expected —
+        that's a CCM-flavored query that doesn't translate.
         """
-        raise NotImplementedError("Stage 4 — see SEED_PLAN.md")
+        for ext in self.client.list_extensions():
+            extension_id = (ext.get("extensionId") or "").strip()
+            if not extension_id:
+                continue
+            user = ext.get("user") or {}
+            core_device = ext.get("coreDevice") or {}
+            tech = (ext.get("tech") or "").strip()
+            dial = (core_device.get("dial") or "").strip()
+            name = (user.get("name") or "").strip()
+
+            # Emit DirectoryNumber.
+            dn_extras: dict = {}
+            for fld in ("voicemail", "outboundCid", "ringtimer",
+                        "noanswerDestination", "busyDestination",
+                        "chanunavailDestination", "mohclass", "callwaiting",
+                        "recording_priority"):
+                v = user.get(fld)
+                if v not in (None, "", 0):
+                    dn_extras[fld] = v
+            self.add(self.directory_number(
+                extension=extension_id,
+                partition__name=DEFAULT_PARTITION_NAME,
+                partition__phone_system__name=ps_name,
+                alerting_name=name,
+                voicemail_profile__name=None,  # stage-5 — synthesized profiles
+                vendor_extras=dn_extras,
+            ))
+
+            # Emit Phone. device_name uses the dial string (e.g. "PJSIP/1001")
+            # so it's deterministic across runs and matches how Asterisk
+            # internally identifies the endpoint.
+            device_name = dial or f"{tech.upper()}/{extension_id}" or extension_id
+            phone_extras: dict = {"freepbx_tech": tech}
+            for fld in ("devicetype", "description", "emergencyCid"):
+                v = core_device.get(fld)
+                if v not in (None, ""):
+                    phone_extras[fld] = v
+            self.add(self.phone(
+                device_name=device_name,
+                phone_system__name=ps_name,
+                mac_address=None,  # FreePBX doesn't track MAC at the SIP-peer level
+                device_kind="other",
+                description=name,
+                registration_status="unknown",
+                last_registered_ip=None,
+                active_load="",
+                inactive_load="",
+                live_login_user="",
+                status_reason="",
+                live_status_polled_at=None,
+                media_zone="",
+                device_profile__name=None,
+                owner_user_id="",
+                user_locale="",
+                dnd_status=False,
+                vendor_extras=phone_extras,
+            ))

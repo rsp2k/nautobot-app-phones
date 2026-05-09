@@ -18,6 +18,7 @@ the adapter's `_load_extensions` runs (stage 4 fills that in).
 
 from __future__ import annotations
 
+from diffsync.enum import DiffSyncFlags
 from nautobot.apps.jobs import BooleanVar, ObjectVar, register_jobs
 from nautobot.extras.choices import SecretsGroupAccessTypeChoices, SecretsGroupSecretTypeChoices
 from nautobot_ssot.jobs.base import DataSource
@@ -30,6 +31,14 @@ from nautobot_phones.models import PhoneSystem
 
 class FreePBXDataSource(DataSource):
     """Sync a FreePBX system into Nautobot."""
+
+    # SKIP_UNMATCHED_DST: don't delete destination records that the source
+    # didn't emit. Critical when the same Nautobot instance hosts records
+    # from MULTIPLE vendor adapters (CCM + FreePBX) — without this, a
+    # FreePBX sync would try to delete every CCM phone/DN/trunk in the DB.
+    # Even single-vendor deployments benefit, since FreePBX adapter doesn't
+    # yet emit all the model types (Lines, BLFs, etc.) the schema supports.
+    diffsync_flags = DiffSyncFlags.SKIP_UNMATCHED_DST
 
     phone_system = ObjectVar(
         model=PhoneSystem,

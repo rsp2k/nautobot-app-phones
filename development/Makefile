@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs logs-web ps shell nbshell sync-status migrate makemigrations test ruff clean freepbx-init freepbx-up freepbx-install freepbx-logs freepbx-down
+.PHONY: help build up down restart logs logs-web ps shell nbshell sync-status migrate makemigrations test ruff clean freepbx-init freepbx-up freepbx-install freepbx-bootstrap freepbx-logs freepbx-down
 
 DC := docker compose
 WEB := nautobot-web
@@ -28,7 +28,8 @@ help:
 	@echo "FreePBX dev container (Phase 5):"
 	@echo "  make freepbx-init    Generate Docker secrets from .env (run once before up)"
 	@echo "  make freepbx-up      Start FreePBX 17 + its MariaDB"
-	@echo "  make freepbx-install Run FreePBX installer (first-boot only — populates /var/www/html + DB)"
+	@echo "  make freepbx-install   Run FreePBX installer (first-boot only — populates /var/www/html + DB)"
+	@echo "  make freepbx-bootstrap Install userman+api modules + generate OAuth2 client credentials"
 	@echo "  make freepbx-logs    Tail FreePBX logs"
 	@echo "  make freepbx-down    Stop FreePBX (data persists in volumes)"
 
@@ -123,8 +124,24 @@ freepbx-install:
 	  $(DC) exec -T -w /usr/local/src/freepbx freepbx \
 	    php install -n --dbuser=freepbxuser --dbpass="$$DB_PASS" --dbhost=freepbx-mariadb
 	@echo ""
-	@echo "Install complete. Visit https://$$(grep ^FREEPBX_DOMAIN .env | cut -d= -f2)/admin/"
-	@echo "to create the first admin user via the web setup wizard."
+	@echo "Install complete. Run: make freepbx-bootstrap"
+
+# Bootstrap path that turns a freshly-installed FreePBX into one our adapter
+# can actually authenticate against — installs the userman+api modules, then
+# generates an OAuth2 client_id/client_secret via fwconsole. Skips the entire
+# web setup wizard (which is fragile to drive headlessly across patch versions).
+# Prints the resulting credentials so you can stash them into .env or a
+# Nautobot SecretsGroup.
+freepbx-bootstrap:
+	@echo "Installing userman + api modules (~30s)..."
+	@$(DC) exec -T freepbx fwconsole ma downloadinstall userman 2>&1 | tail -3
+	@$(DC) exec -T freepbx fwconsole ma downloadinstall api 2>&1 | tail -3
+	@echo ""
+	@echo "Generating OAuth2 application credentials..."
+	@$(DC) exec -T freepbx fwconsole api gql genclientcred freepbx
+	@echo ""
+	@echo "Stash client_id + client_secret in .env as FREEPBX_LAB_CLIENT_ID / _SECRET,"
+	@echo "or wire them into a Nautobot SecretsGroup attached to the freepbx PhoneSystem."
 
 freepbx-logs:
 	$(DC) logs -f --tail=100 freepbx freepbx-mariadb

@@ -56,7 +56,10 @@ class FreePBXClient:
     """
 
     TOKEN_PATH = "/admin/api/api/token"
-    GRAPHQL_PATH = "/admin/api/api/graphql"
+    # Confirmed against FreePBX 17.0.21: the path is `/gql`, not `/graphql`.
+    # `genclientcred` reports both "graphql_url" and "gql_url" but only the
+    # latter actually serves; the former returns 403 even with a valid token.
+    GRAPHQL_PATH = "/admin/api/api/gql"
     # Refresh slightly before token expiry to avoid mid-flight 401s.
     TOKEN_RENEW_SECONDS_BEFORE_EXPIRY = 30
 
@@ -140,66 +143,70 @@ class FreePBXClient:
     def list_extensions(self) -> list[dict]:
         """Fetch all extensions (PJSIP/SIP/IAX2/etc.).
 
-        FreePBX 17's GraphQL exposes extensions under ``allExtensions``
-        (or ``fetchAllExtensions`` depending on module version). We try
-        the documented name first; if that fails, callers can fall back
-        to direct DB queries.
+        Schema confirmed against FreePBX 17.0.21 + api module 17.0.6:
+
+          fetchAllExtensions (Connection wrapper) {
+            totalCount, extension[] {
+              id, extensionId, tech,
+              user { extension, name, voicemail, outboundCid, ... },
+              coreDevice { dial, devicetype, description, emergencyCid, ... }
+            }
+          }
+
+        Caller flattens the nested user/coreDevice into a single dict
+        per extension since our DiffSync models don't care about the
+        FreePBX-internal split.
         """
-        # NOTE: the exact field shape will be confirmed during stage-4
-        # implementation against a seeded FreePBX. This is the documented
-        # 17.0 schema as of the 17.0.21 release.
         gql = """
         query {
-          allExtensions {
-            extensionNumber
-            displayName
-            tech
-            email
-            outboundCid
-            voicemail {
-              enabled
-              boxNumber
+          fetchAllExtensions {
+            totalCount
+            extension {
+              id
+              extensionId
+              tech
+              user {
+                extension
+                name
+                voicemail
+                outboundCid
+                ringtimer
+                noanswerDestination
+                busyDestination
+                chanunavailDestination
+                mohclass
+                callwaiting
+                recording_priority
+              }
+              coreDevice {
+                dial
+                devicetype
+                description
+                emergencyCid
+              }
             }
           }
         }
         """
         data = self.query(gql)
-        return _safe_get(data, "allExtensions", "extensions") or []
+        wrapper = data.get("fetchAllExtensions") or {}
+        return wrapper.get("extension") or []
 
     def list_trunks(self) -> list[dict]:
-        """Fetch all trunks."""
-        gql = """
-        query {
-          allTrunks {
-            trunkId
-            name
-            techType
-            description
-            disabled
-          }
-        }
+        """Fetch all trunks.
+
+        STUB — trunks aren't exposed via the api module's default schema in
+        17.0.6; they require the `outroutes`/`trunks` API extensions which
+        ship as separate modules. Stage-5 work.
         """
-        data = self.query(gql)
-        return _safe_get(data, "allTrunks", "trunks") or []
+        return []
 
     def list_outbound_routes(self) -> list[dict]:
-        """Fetch all outbound routes (each contains its dial-pattern list)."""
-        gql = """
-        query {
-          allOutboundRoutes {
-            routeId
-            name
-            patterns {
-              prepend
-              prefix
-              match
-            }
-            trunks
-          }
-        }
+        """Fetch all outbound routes.
+
+        STUB — see ``list_trunks`` note. Stage-5 work.
         """
-        data = self.query(gql)
-        return _safe_get(data, "allOutboundRoutes", "outboundRoutes") or []
+        return []
 
 
 def _safe_get(d: dict, *keys: str) -> Any:
