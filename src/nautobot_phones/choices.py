@@ -115,6 +115,7 @@ class RegistrationStatusChoices(ChoiceSet):
     )
 
 
+class PhoneDeviceKindChoices(ChoiceSet):
     """The kind of phone endpoint this Phone record represents.
 
     Current values are CCM-flavored because that's our first vendor; CCM

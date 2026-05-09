@@ -9,6 +9,7 @@ registration shim.
 from nautobot.apps.jobs import register_jobs
 
 from nautobot_phones.integrations.cisco_ucm.jobs import CUCMDataSource
+from nautobot_phones.integrations.freepbx.jobs import FreePBXDataSource
 
-jobs = [CUCMDataSource]
+jobs = [CUCMDataSource, FreePBXDataSource]
 register_jobs(*jobs)
