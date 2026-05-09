@@ -156,15 +156,102 @@ services:
     networks:
       - internal
 
+  # ---------------------------------------------------------------------------
+  # FreePBX 17 dev container (Phase 5 — second-vendor adapter target).
+  #
+  # Image: escomputers/freepbx:17 (FreePBX 17.0.21 + Asterisk 21 + PHP 8.2 +
+  # MariaDB 10.11). Started independently via `make freepbx-up` to keep first-
+  # boot provisioning (3-5min) out of the default `make up` path.
+  #
+  # Static IPs on freepbx-net match the upstream image's expected DB host
+  # (172.18.0.10). MariaDB credentials come via Docker file-based secrets
+  # generated from .env by `make freepbx-init`.
+  #
+  # We don't expose RTP ports — the adapter only needs the GraphQL/REST API
+  # at /admin/ which Caddy serves over HTTPS.
+  # ---------------------------------------------------------------------------
+  freepbx-mariadb:
+    image: mariadb:10.11
+    container_name: ${COMPOSE_PROJECT}-freepbx-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/freepbx_mysql_root_pw
+      MYSQL_USER: freepbxuser
+      MYSQL_PASSWORD_FILE: /run/secrets/freepbx_user_pw
+    secrets:
+      - freepbx_mysql_root_pw
+      - freepbx_user_pw
+    volumes:
+      - freepbx-db-data:/var/lib/mysql
+      - ./freepbx/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./freepbx/my.cnf:/etc/mysql/my.cnf:ro
+    networks:
+      freepbx-net:
+        ipv4_address: 172.18.0.10
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  freepbx:
+    image: escomputers/freepbx:17
+    container_name: ${COMPOSE_PROJECT}-freepbx
+    restart: unless-stopped
+    cap_add:
+      # iptables manipulation for fail2ban rules — required by upstream image.
+      - NET_ADMIN
+    volumes:
+      # Whole-dir persistence as required by the upstream image. Asterisk
+      # state, FreePBX modules, generated configs all live under /var and
+      # /etc; bind-volumes here means they survive container recreate.
+      - freepbx-var:/var
+      - freepbx-etc:/etc
+    secrets:
+      - freepbx_sasl_passwd
+    networks:
+      freepbx-net:
+        ipv4_address: 172.18.0.20
+      caddy:
+    labels:
+      caddy: ${FREEPBX_DOMAIN:-freepbx-dev.example.com}
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy.encode: "gzip zstd"
+    depends_on:
+      freepbx-mariadb:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:
   nautobot-static:
   nautobot-media:
   nautobot-git-repos:
+  freepbx-db-data:
+  freepbx-var:
+  freepbx-etc:
+
+secrets:
+  freepbx_mysql_root_pw:
+    file: ./freepbx/secrets/mysql_root_pw.txt
+  freepbx_user_pw:
+    file: ./freepbx/secrets/freepbxuser_pw.txt
+  freepbx_sasl_passwd:
+    file: ./freepbx/secrets/sasl_passwd.txt
 
 networks:
   internal:
     driver: bridge
   caddy:
     external: true
+  # Isolated subnet for the FreePBX container pair. Static IPs match what
+  # escomputers/freepbx:17 expects internally (the image references the DB
+  # at 172.18.0.10). Subnet 172.18.0.0/16 doesn't collide with our existing
+  # docker bridge networks (all in 10.10.0.0/12 chunks).
+  freepbx-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
