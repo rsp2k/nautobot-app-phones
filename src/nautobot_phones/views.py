@@ -345,7 +345,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 fields=[
                     "device_name", "device_kind", "description", "mac_address", "model",
                     "phone_system", "device", "location",  # `location` is a @property reading device.location
-                    "ccm_location", "network_location",
+                    "media_zone",
                 ],
                 key_transforms={"location": "Physical Location (from Device)"},
             ),
@@ -364,25 +364,18 @@ class PhoneUIViewSet(NautobotUIViewSet):
             ),
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=200,
-                label="Device Information",
+                label="Device Profile",
                 fields=[
-                    "device_profile", "common_phone_profile", "common_device_configuration",
-                    "phone_button_template", "softkey_template",
-                    "owner_user_id", "mobility_user_id",
-                    "built_in_bridge", "privacy", "device_mobility_mode",
-                    "always_use_prime_line", "always_use_prime_line_for_voice",
-                    "user_locale", "network_locale", "aar_neighborhood",
-                    "dnd_status", "dnd_option",
+                    "device_profile",
+                    "owner_user_id", "user_locale",
+                    "dnd_status",
                 ],
             ),
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=300,
-                label="Protocol Specific Information",
-                fields=[
-                    "device_security_profile", "sip_profile",
-                    "rerouting_css", "subscribe_css",
-                    "mtp_required", "packet_capture_mode",
-                ],
+                label="Vendor-Specific Config (long-tail)",
+                fields=["vendor_extras"],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
             ),
             # ---- Right column: button configuration ----
             ObjectsTablePanel(
@@ -662,7 +655,7 @@ class HuntListUIViewSet(NautobotUIViewSet):
                 section=SectionChoices.LEFT_HALF, weight=100,
                 fields=[
                     "name", "phone_system", "description",
-                    "call_manager_group", "route_list_enabled", "voice_mail_usage",
+                    "route_list_enabled", "voice_mail_usage",
                     "vendor_extras",
                 ],
                 value_transforms={"vendor_extras": [_vendor_extras_summary]},

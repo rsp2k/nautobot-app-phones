@@ -169,19 +169,12 @@ class PhoneForm(NautobotModelForm):
             # Identity
             "device_name", "device_kind", "mac_address", "description", "phone_system", "device",
             "registration_status", "last_registered_ip",
-            "ccm_location", "network_location",
-            # Device Information
-            "device_profile", "common_phone_profile", "common_device_configuration",
-            "phone_button_template", "softkey_template",
-            "owner_user_id", "mobility_user_id",
-            "built_in_bridge", "privacy", "device_mobility_mode",
-            "always_use_prime_line", "always_use_prime_line_for_voice",
-            "user_locale", "network_locale", "aar_neighborhood",
-            "dnd_status", "dnd_option",
-            # Protocol Specific Information
-            "device_security_profile", "sip_profile", "rerouting_css", "subscribe_css",
-            "mtp_required", "packet_capture_mode",
-            # Misc
+            "media_zone",
+            # Device Profile (vendor-agnostic device-config bundle)
+            "device_profile",
+            "owner_user_id", "user_locale",
+            "dnd_status",
+            # Vendor-specific long-tail
             "vendor_extras", "tags",
         )
 
@@ -190,7 +183,7 @@ class PhoneFilterForm(NautobotFilterForm):
     """Filter sidebar form for Phone list view."""
 
     model = models.Phone
-    field_order = ("q", "device_name", "device_kind", "mac_address", "phone_system", "registration_status", "device_profile", "owner_user_id", "ccm_location")
+    field_order = ("q", "device_name", "device_kind", "mac_address", "phone_system", "registration_status", "device_profile", "owner_user_id", "media_zone")
     q = forms.CharField(required=False, label="Search")
     device_kind = forms.MultipleChoiceField(choices=PhoneDeviceKindChoices, required=False, label="Device Kind")
     registration_status = forms.MultipleChoiceField(choices=RegistrationStatusChoices, required=False)
@@ -363,7 +356,7 @@ class HuntListForm(NautobotModelForm):
     class Meta:
         model = models.HuntList
         fields = (
-            "name", "phone_system", "description", "call_manager_group",
+            "name", "phone_system", "description",
             "route_list_enabled", "voice_mail_usage", "vendor_extras", "tags",
         )
 

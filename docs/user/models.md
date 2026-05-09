@@ -47,12 +47,20 @@ CCM-specific fields not modeled as columns. Examples:
 
 | Model | Common contents |
 |-------|----------------|
-| `Phone` | `axl_model` (used by device-creation pass to find DeviceType) |
+| `Phone` | `axl_model`; CCM-specific provisioning detail when getPhone enrichment is on (`builtInBridgeStatus`, `callInfoPrivacyStatus`, `deviceMobilityMode`, `alwaysUsePrimeLine*`, `aarNeighborhoodName`, `dndOption`, `securityProfileName`, `sipProfileName`, `rerouteCallingSearchSpaceName`, `subscribeCallingSearchSpaceName`, `mtpRequired`, `packetCaptureMode`, `commonPhoneConfigName`, `commonDeviceConfigName`, `phoneTemplateName`, `softkeyTemplateName`, `mobilityUserIdName`, `networkLocation`, `networkLocale`) |
+| `Line` | When getPhone enrichment is on: `mwlPolicy`, `audibleMwi`, `recordingFlag`, `partitionUsage`, `consecutiveRingSetting`, `ringSettingIdlePickupAlert`, `ringSettingActivePickupAlert` |
+| `HuntList` | `callManagerGroupName` (CCM-only) |
 | `AnalogGateway` | `module_units` (list of `{unit_index, subunit_index, subunit_product}` dicts) |
 | `RoutePattern` | (currently empty by default) |
 | `TranslationPattern` | Long-tail Cisco fields (presentation bits, numbering plans, number types) |
 | `DeviceProfile` | CCM-specific bundled refs: `callManagerGroupName`, `regionName`, `locationName`, `dateTimeSettingName`, `srstName`, `mediaResourceListName`, `networkLocale`, etc. (FreePBX populates differently or leaves empty) |
 | `VoicemailProfile` | `voiceMailboxMask` (CCM-specific) |
+
+CCM-specific fields are stored under their original AXL camelCase names
+in `vendor_extras` — preserves traceability with the CCM admin UI and
+keeps the Phone/Line schemas vendor-agnostic. A FreePBX adapter would
+populate different keys (e.g. PJSIP-specific config) without schema
+churn on Nautobot's side.
 
 Filterable via Nautobot's standard JSON filtering:
 

@@ -115,10 +115,10 @@ class RegistrationStatusChoices(ChoiceSet):
     )
 
 
-class PhoneDeviceKindChoices(ChoiceSet):
     """The kind of phone endpoint this Phone record represents.
 
-    CCM identifies device type by the device_name prefix:
+    Current values are CCM-flavored because that's our first vendor; CCM
+    identifies device type by the device_name prefix:
 
       - SEP: physical IP phone (`SEP<MAC>`)
       - CSF: Cisco Jabber Softphone, Windows/Mac (`CSF<USERNAME>`)
@@ -129,14 +129,21 @@ class PhoneDeviceKindChoices(ChoiceSet):
       - CCX: Contact Center Express CTI port (`CCX-<name>`)
       - CER: Emergency Responder CTI port (`CER-CTI-<name>`)
       - CTI: Custom CTI port (call-routing virtual endpoint, `CTI<name>`)
+      - OTHER: any endpoint that doesn't match a known prefix — the safety
+        valve for non-Cisco vendors (FreePBX, etc.) until we add their
+        own choice values.
 
-    SEP and ATA encode a real MAC in the device name. The Jabber variants
-    (CSF/TCT/BOT/CSK) encode a username instead — they have no MAC, just
-    a CCM-side login identity. CCX/CER/CTI are virtual call-routing
-    endpoints with no hardware — they exist purely to receive, queue, or
-    forward calls per CCM dial-plan rules. We use this field to filter
-    "real phones" vs softphones vs CTI ports in the UI and to gate the
-    device-creation pass (which only runs for physical hardware).
+    Non-Cisco adapters are free to populate `OTHER` and stash detail in
+    `vendor_extras`, OR we can add vendor-specific choices here when we
+    have data on what FreePBX actually exposes (PJSIP/SIP technology,
+    softphone vs hardphone via vendor MAC OUI, etc.).
+
+    SEP and ATA encode a real MAC in the device name. CSF/TCT/BOT/CSK
+    encode a username — they have no MAC, just a login identity.
+    CCX/CER/CTI are virtual call-routing endpoints with no hardware.
+    We use this field to filter "real phones" vs softphones vs CTI ports
+    in the UI and to gate the device-creation pass (which only runs for
+    physical hardware).
     """
 
     SEP = "sep"

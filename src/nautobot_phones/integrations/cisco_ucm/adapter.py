@@ -390,23 +390,39 @@ class CUCMSourceAdapter(Adapter):
                 return "" if v == "None" else v
 
             axl_model = _get(phone_row, "model", "") or ""
+            # Build vendor_extras dict that holds CCM-specific config we
+            # don't promote to first-class columns (vendor-agnostic discipline).
+            # Keys preserve the AXL camelCase name for traceability with the
+            # CCM admin UI; FreePBX adapter would populate different keys.
             extras = _extract_extras(phone_row, exclude={
+                # Excluded — promoted to first-class columns:
                 "name", "description", "currentRegistrationStatus",
-                "model",  # excluded — re-added explicitly below as axl_model so
-                          # the device-creation pass can find/create the right DeviceType
-                "locationName", "networkLocation",
-                "devicePoolName", "commonPhoneConfigName", "commonDeviceConfigName",
+                "ownerUserName", "userLocale",
+                "dndStatus",
+                "devicePoolName",   # → device_profile FK
+                "locationName",     # → media_zone (vendor-neutral name)
+                # Excluded — special handling:
+                "model",            # promoted to vendor_extras["axl_model"] explicitly
+            })
+            extras["axl_model"] = axl_model
+            # Resolve nested FK refs that _extract_extras left as zeep objects
+            # back into plain string names (matches the human-readable form
+            # CCM admin UI shows). Without this the JSON serializes weirdly.
+            for fk_field in (
+                "callManagerGroupName", "regionName",
+                "commonPhoneConfigName", "commonDeviceConfigName",
                 "phoneTemplateName", "softkeyTemplateName",
-                "ownerUserName", "mobilityUserIdName",
-                "builtInBridgeStatus", "callInfoPrivacyStatus", "deviceMobilityMode",
-                "alwaysUsePrimeLine", "alwaysUsePrimeLineForVoiceMessage",
-                "userLocale", "networkLocale", "aarNeighborhoodName",
-                "dndStatus", "dndOption",
+                "mobilityUserIdName", "aarNeighborhoodName",
                 "securityProfileName", "sipProfileName",
                 "rerouteCallingSearchSpaceName", "subscribeCallingSearchSpaceName",
-                "mtpRequired", "packetCaptureMode",
-            })
-            extras["axl_model"] = axl_model  # stash for post-sync device-creation
+                "callingSearchSpaceName",
+            ):
+                if fk_field in extras:
+                    extras[fk_field] = _fk_name(fk_field)
+            # Coerce CCM stringly-typed booleans into real bools where it matters
+            for bool_field in ("mtpRequired",):
+                if bool_field in extras:
+                    extras[bool_field] = _axl_bool(extras[bool_field])
 
             self.add(self.phone(
                 device_name=device_name,
@@ -422,36 +438,14 @@ class CUCMSourceAdapter(Adapter):
                 live_login_user=(ris.get("login_user_id") or "").strip(),
                 status_reason=(ris.get("status_reason") or "").strip(),
                 live_status_polled_at=self._ris_polled_at,
-                # CCM Location (Call Admission Control) + Network Location
-                ccm_location=_fk_name("locationName"),
-                network_location=(_get(phone_row, "networkLocation", "") or ""),
-                # Device Information — device_profile is our vendor-agnostic
-                # name; AXL's `devicePoolName` maps to our DeviceProfile.
+                # Vendor-agnostic media-admission boundary (CCM Location).
+                media_zone=_fk_name("locationName"),
+                # Vendor-agnostic device-config bundle FK (CCM DevicePool).
                 device_profile__name=(_fk_name("devicePoolName") or None),
-                common_phone_profile=_fk_name("commonPhoneConfigName"),
-                common_device_configuration=_fk_name("commonDeviceConfigName"),
-                phone_button_template=_fk_name("phoneTemplateName"),
-                softkey_template=_fk_name("softkeyTemplateName"),
+                # General-telephony identity fields kept as columns.
                 owner_user_id=_fk_name("ownerUserName"),
-                mobility_user_id=_fk_name("mobilityUserIdName"),
-                built_in_bridge=(_get(phone_row, "builtInBridgeStatus", "") or ""),
-                privacy=(_get(phone_row, "callInfoPrivacyStatus", "") or ""),
-                device_mobility_mode=(_get(phone_row, "deviceMobilityMode", "") or ""),
-                always_use_prime_line=(_get(phone_row, "alwaysUsePrimeLine", "") or ""),
-                always_use_prime_line_for_voice=(_get(phone_row, "alwaysUsePrimeLineForVoiceMessage", "") or ""),
                 user_locale=(_get(phone_row, "userLocale", "") or ""),
-                network_locale=(_get(phone_row, "networkLocale", "") or ""),
-                aar_neighborhood=_fk_name("aarNeighborhoodName"),
                 dnd_status=_axl_bool(_get(phone_row, "dndStatus")),
-                dnd_option=(_get(phone_row, "dndOption", "") or ""),
-                # Protocol Specific Information
-                device_security_profile=_fk_name("securityProfileName"),
-                sip_profile=_fk_name("sipProfileName"),
-                rerouting_css=_fk_name("rerouteCallingSearchSpaceName"),
-                subscribe_css=_fk_name("subscribeCallingSearchSpaceName"),
-                mtp_required=_axl_bool(_get(phone_row, "mtpRequired")),
-                packet_capture_mode=(_get(phone_row, "packetCaptureMode", "") or ""),
-                # Long-tail
                 vendor_extras=extras,
             ))
 
@@ -472,6 +466,7 @@ class CUCMSourceAdapter(Adapter):
                     directory_number__partition__name=dn_partition_name,
                     label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
+                    vendor_extras={},
                 ))
 
         if skipped_non_phone and self.job:
@@ -559,6 +554,16 @@ class CUCMSourceAdapter(Adapter):
                     except (TypeError, ValueError):
                         return None
 
+                # CCM-specific per-line config goes into vendor_extras so the
+                # Line schema stays vendor-agnostic. Keys preserve AXL camelCase.
+                line_extras = {}
+                for fld in ("mwlPolicy", "audibleMwi", "recordingFlag",
+                            "partitionUsage", "consecutiveRingSetting",
+                            "ringSettingIdlePickupAlert", "ringSettingActivePickupAlert"):
+                    val = _get(line, fld, "")
+                    if val:
+                        line_extras[fld] = val
+
                 self.add(self.line(
                     phone__device_name=device_name,
                     phone__phone_system__name=ps_name,
@@ -567,17 +572,11 @@ class CUCMSourceAdapter(Adapter):
                     directory_number__partition__name=dn_partition_name,
                     label=(_get(line, "label", "") or _get(line, "displayAscii", "") or _get(line, "display", "") or ""),
                     ring_setting=_get(line, "ringSetting", "") or "",
-                    # Per-line enrichment
+                    # General-telephony per-line enrichment.
                     max_num_calls=_int_or_none(_get(line, "maxNumCalls")),
                     busy_trigger=_int_or_none(_get(line, "busyTrigger")),
-                    mwl_policy=(_get(line, "mwlPolicy", "") or ""),
-                    audible_mwi=(_get(line, "audibleMwi", "") or ""),
-                    recording_flag=(_get(line, "recordingFlag", "") or ""),
                     missed_call_logging=_axl_bool(_get(line, "missedCallLogging")),
-                    partition_usage=(_get(line, "partitionUsage", "") or ""),
-                    consecutive_ring_setting=(_get(line, "consecutiveRingSetting", "") or ""),
-                    ring_setting_idle_pickup_alert=(_get(line, "ringSettingIdlePickupAlert", "") or ""),
-                    ring_setting_active_pickup_alert=(_get(line, "ringSettingActivePickupAlert", "") or ""),
+                    vendor_extras=line_extras,
                 ))
             # Speed dials — `dirn` here is a plain string (the destination
             # number), unlike Line's `dirn` which is a complex DN reference.
@@ -985,13 +984,18 @@ class CUCMSourceAdapter(Adapter):
                 continue
             cmg_ref = _get(hl, "callManagerGroupName")
             cmg_name = _get(cmg_ref, "_value_1", "") if cmg_ref else ""
+            # call_manager_group is a CCM-only concept — no FreePBX analogue.
+            # Stash in vendor_extras so the schema stays vendor-agnostic.
+            hl_extras = {}
+            if cmg_name:
+                hl_extras["callManagerGroupName"] = cmg_name
             self.add(self.hunt_list(
                 name=name,
                 phone_system__name=ps_name,
                 description=(_get(hl, "description", "") or ""),
-                call_manager_group=cmg_name,
                 route_list_enabled=_axl_bool(_get(hl, "routeListEnabled")),
                 voice_mail_usage=_axl_bool(_get(hl, "voiceMailUsage")),
+                vendor_extras=hl_extras,
             ))
             try:
                 full = self.client._service.getHuntList(name=name)

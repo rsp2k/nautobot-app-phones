@@ -71,7 +71,7 @@ class PhoneFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.Phone
-        fields = ["device_name", "mac_address", "device_kind", "phone_system", "registration_status", "device_profile", "owner_user_id", "ccm_location"]
+        fields = ["device_name", "mac_address", "device_kind", "phone_system", "registration_status", "device_profile", "owner_user_id", "media_zone"]
 
 
 class TrunkFilterSet(NautobotFilterSet):
@@ -135,7 +135,7 @@ class HuntListFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.HuntList
-        fields = ["name", "phone_system", "call_manager_group", "route_list_enabled", "voice_mail_usage"]
+        fields = ["name", "phone_system", "route_list_enabled", "voice_mail_usage"]
 
 
 class LineGroupFilterSet(NautobotFilterSet):

@@ -113,22 +113,17 @@ class PhoneModel(NautobotModel):
     _attributes = (
         "mac_address", "device_kind", "description",
         "registration_status", "last_registered_ip",
-        "ccm_location", "network_location",
+        "media_zone",
         # Live Status (from RisPort70 — only diffed when RIS enrichment is on)
         "active_load", "inactive_load", "live_login_user", "status_reason",
         "live_status_polled_at",
-        # Device Information
-        "device_profile__name", "common_phone_profile", "common_device_configuration",
-        "phone_button_template", "softkey_template",
-        "owner_user_id", "mobility_user_id",
-        "built_in_bridge", "privacy", "device_mobility_mode",
-        "always_use_prime_line", "always_use_prime_line_for_voice",
-        "user_locale", "network_locale", "aar_neighborhood",
-        "dnd_status", "dnd_option",
-        # Protocol Specific
-        "device_security_profile", "sip_profile", "rerouting_css", "subscribe_css",
-        "mtp_required", "packet_capture_mode",
-        # Vendor extras (carries axl_model used by post-sync device-creation)
+        # Vendor-agnostic device profile FK + general identity fields
+        "device_profile__name",
+        "owner_user_id", "user_locale",
+        "dnd_status",
+        # Vendor extras carries CCM-specific config (built_in_bridge,
+        # device_mobility_mode, CSS refs, MTP, button templates, etc.)
+        # plus axl_model used by post-sync device-creation.
         "vendor_extras",
     )
 
@@ -139,39 +134,18 @@ class PhoneModel(NautobotModel):
     description: str = ""
     registration_status: str = "unknown"
     last_registered_ip: Optional[str] = None
-    ccm_location: str = ""
-    network_location: str = ""
+    media_zone: str = ""
     # Live Status
     active_load: str = ""
     inactive_load: str = ""
     live_login_user: str = ""
     status_reason: str = ""
     live_status_polled_at: Optional[datetime] = None
-    # Device Information
+    # Device Profile + general identity
     device_profile__name: Optional[str] = None
-    common_phone_profile: str = ""
-    common_device_configuration: str = ""
-    phone_button_template: str = ""
-    softkey_template: str = ""
     owner_user_id: str = ""
-    mobility_user_id: str = ""
-    built_in_bridge: str = ""
-    privacy: str = ""
-    device_mobility_mode: str = ""
-    always_use_prime_line: str = ""
-    always_use_prime_line_for_voice: str = ""
     user_locale: str = ""
-    network_locale: str = ""
-    aar_neighborhood: str = ""
     dnd_status: bool = False
-    dnd_option: str = ""
-    # Protocol Specific
-    device_security_profile: str = ""
-    sip_profile: str = ""
-    rerouting_css: str = ""
-    subscribe_css: str = ""
-    mtp_required: bool = False
-    packet_capture_mode: str = ""
     # Vendor extras
     vendor_extras: dict = {}
 
@@ -200,11 +174,11 @@ class LineModel(NautobotModel):
     _attributes = (
         "directory_number__extension", "directory_number__partition__name",
         "label", "ring_setting",
-        # Per-line enrichment from getPhone
-        "max_num_calls", "busy_trigger", "mwl_policy", "audible_mwi",
-        "recording_flag", "missed_call_logging", "partition_usage",
-        "consecutive_ring_setting",
-        "ring_setting_idle_pickup_alert", "ring_setting_active_pickup_alert",
+        # Per-line enrichment (general telephony — kept as columns)
+        "max_num_calls", "busy_trigger", "missed_call_logging",
+        # Vendor-specific per-line config (CCM MWI policy, partition usage,
+        # ring-setting variants, recording flag) lives in vendor_extras.
+        "vendor_extras",
     )
 
     phone__device_name: str
@@ -214,17 +188,10 @@ class LineModel(NautobotModel):
     directory_number__partition__name: str
     label: str = ""
     ring_setting: str = ""
-    # Per-line enrichment
     max_num_calls: Optional[int] = None
     busy_trigger: Optional[int] = None
-    mwl_policy: str = ""
-    audible_mwi: str = ""
-    recording_flag: str = ""
     missed_call_logging: bool = True
-    partition_usage: str = ""
-    consecutive_ring_setting: str = ""
-    ring_setting_idle_pickup_alert: str = ""
-    ring_setting_active_pickup_alert: str = ""
+    vendor_extras: dict = {}
 
 
 class BusyLampFieldModel(NautobotModel):
@@ -412,12 +379,11 @@ class HuntListModel(NautobotModel):
     _model = models.HuntList
     _modelname = "hunt_list"
     _identifiers = ("name", "phone_system__name")
-    _attributes = ("description", "call_manager_group", "route_list_enabled", "voice_mail_usage", "vendor_extras")
+    _attributes = ("description", "route_list_enabled", "voice_mail_usage", "vendor_extras")
 
     name: str
     phone_system__name: str
     description: str = ""
-    call_manager_group: str = ""
     route_list_enabled: bool = True
     voice_mail_usage: bool = False
     vendor_extras: dict = {}

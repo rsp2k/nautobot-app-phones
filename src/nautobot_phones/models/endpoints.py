@@ -36,7 +36,9 @@ class Phone(PrimaryModel):
         max_length=100,
         help_text="Vendor-side device name. CCM convention: SEP<MAC> for IP phones, "
                   "CSF<username> for Jabber desktop, TCT<username> for Jabber iOS, "
-                  "BOT<username> for Jabber Android, ATA<MAC> for ATAs.",
+                  "BOT<username> for Jabber Android, ATA<MAC> for ATAs. FreePBX/Asterisk "
+                  "adapters typically use <technology>/<extension> (e.g. PJSIP/100) or "
+                  "their own MAC-based names.",
     )
     device_kind = models.CharField(
         max_length=16,
@@ -63,15 +65,12 @@ class Phone(PrimaryModel):
     # authority for floor/closet/rack). The Phone exposes `location` as a
     # @property below that reads `self.device.location`. This avoids storing
     # the same fact in two places.
-    ccm_location = models.CharField(
+    media_zone = models.CharField(
         max_length=100, blank=True,
-        verbose_name="CCM Location",
-        help_text="CCM Location (Call Admission Control / bandwidth zone), e.g. 'Hub_None', 'Branch_512K'. "
+        verbose_name="Media Zone",
+        help_text="Vendor-agnostic name for a media/bandwidth admission boundary. "
+                  "Maps to CCM Location, Avaya Network Region, or FreePBX site/tenant. "
                   "Distinct from physical location — that's tracked on the linked Device.",
-    )
-    network_location = models.CharField(
-        max_length=32, blank=True,
-        help_text='CCM Network Location: "Use System Default", "On Net", "Off Net".',
     )
     device = models.ForeignKey(
         to="dcim.Device",
@@ -124,71 +123,37 @@ class Phone(PrimaryModel):
         help_text="When the live status fields above were last updated from RisPort70.",
     )
 
-    # ---- Device Information --------------------------------------------------
-    # `device_profile` is our vendor-agnostic name for what CCM calls a
-    # "Device Pool" and FreePBX calls a device template — a named bundle
-    # of provisioning defaults applied to phones referencing it.
+    # ---- Device Profile (vendor-agnostic device-config bundle) ---------------
+    # CCM DevicePool / FreePBX device template — a named bundle of
+    # provisioning defaults applied to phones referencing it.
     device_profile = models.ForeignKey(
         to="nautobot_phones.DeviceProfile",
         on_delete=models.SET_NULL, null=True, blank=True,
         related_name="phones",
         help_text="Vendor-agnostic device-config bundle. CCM DevicePool / FreePBX device template.",
     )
-    common_phone_profile = models.CharField(max_length=100, blank=True)
-    common_device_configuration = models.CharField(max_length=100, blank=True)
-    phone_button_template = models.CharField(max_length=100, blank=True)
-    softkey_template = models.CharField(max_length=100, blank=True)
     owner_user_id = models.CharField(
         max_length=100, blank=True,
-        help_text="CCM end-user assigned as the phone owner.",
+        help_text="End-user assigned as the phone owner.",
     )
-    mobility_user_id = models.CharField(max_length=100, blank=True)
-    built_in_bridge = models.CharField(
-        max_length=16, blank=True,
-        help_text='Tri-state: "Default", "On", "Off".',
-    )
-    privacy = models.CharField(
-        max_length=16, blank=True,
-        help_text='Tri-state: "Default", "On", "Off".',
-    )
-    device_mobility_mode = models.CharField(max_length=16, blank=True)
-    always_use_prime_line = models.CharField(max_length=16, blank=True)
-    always_use_prime_line_for_voice = models.CharField(max_length=16, blank=True)
     user_locale = models.CharField(max_length=64, blank=True)
-    network_locale = models.CharField(max_length=64, blank=True)
-    aar_neighborhood = models.CharField(max_length=100, blank=True)
 
     # ---- DND (Do Not Disturb) ------------------------------------------------
     dnd_status = models.BooleanField(
         default=False,
         help_text="DND on/off (the phone-wide setting, not per-line).",
     )
-    dnd_option = models.CharField(
-        max_length=32, blank=True,
-        help_text='"None", "Ringer Off", or "Call Reject".',
-    )
-
-    # ---- Protocol Specific Information ---------------------------------------
-    device_security_profile = models.CharField(max_length=100, blank=True)
-    sip_profile = models.CharField(max_length=100, blank=True)
-    rerouting_css = models.CharField(
-        max_length=100, blank=True, verbose_name="Rerouting CSS",
-        help_text="CSS used when SIP REFER reroutes calls.",
-    )
-    subscribe_css = models.CharField(
-        max_length=100, blank=True, verbose_name="SUBSCRIBE CSS",
-        help_text="CSS used for SIP SUBSCRIBE messages.",
-    )
-    mtp_required = models.BooleanField(
-        default=False, verbose_name="MTP Required",
-        help_text="Force a Media Termination Point in every call path.",
-    )
-    packet_capture_mode = models.CharField(max_length=32, blank=True)
 
     # ---- Vendor extras -------------------------------------------------------
+    # CCM-specific provisioning detail (built-in-bridge, device-mobility,
+    # CSS refs, MTP, button/softkey templates, security profile, locale,
+    # AAR, etc.) lives here so a future FreePBX adapter can populate
+    # whatever its own `vendor_extras` dialect supplies. Keys preserve
+    # the AXL field name (camelCase) for traceability.
     vendor_extras = models.JSONField(
         default=dict, blank=True,
-        help_text="Long-tail CCM fields + axl_model (used by device-creation pass).",
+        help_text="Vendor-specific long-tail config (CCM/FreePBX/etc). "
+                  "Includes axl_model used by device-creation pass.",
     )
 
     # CCM uses device_name as the canonical identifier across all phone types
@@ -212,10 +177,11 @@ class Phone(PrimaryModel):
 
         Nautobot DCIM is the authority for physical placement (floor,
         closet, rack). The Phone-level `location` was historically a
-        dcim.Location FK but conflated the CCM concept of "Location"
-        (Call Admission Control / bandwidth class) with physical
-        placement. We split them: ccm_location is now a CharField on
-        Phone, physical placement reads from `self.device.location`.
+        dcim.Location FK but conflated the vendor-side concept of
+        "media zone" (call-admission/bandwidth boundary) with physical
+        placement. We split them: `media_zone` is a vendor-agnostic
+        CharField on Phone (CCM Location / Avaya Network Region /
+        FreePBX site), physical placement reads from `self.device.location`.
         """
         return self.device.location if self.device_id else None
 
@@ -276,22 +242,11 @@ class Line(BaseModel):
         null=True, blank=True,
         help_text="Number of calls before this appearance reports busy (CCM default 2).",
     )
-    mwl_policy = models.CharField(
-        max_length=32, blank=True,
-        verbose_name="MWI Policy",
-        help_text='Message Waiting Indicator policy ("Use System Policy", etc.).',
-    )
-    audible_mwi = models.CharField(max_length=16, blank=True, verbose_name="Audible MWI")
-    recording_flag = models.CharField(
-        max_length=64, blank=True,
-        help_text='"Call Recording Disabled", "Automatic Call Recording Enabled", etc.',
-    )
     missed_call_logging = models.BooleanField(default=True)
-    partition_usage = models.CharField(max_length=32, blank=True)
-    # Inline ring-setting variants (idle pickup alert, active pickup alert)
-    consecutive_ring_setting = models.CharField(max_length=32, blank=True)
-    ring_setting_idle_pickup_alert = models.CharField(max_length=32, blank=True)
-    ring_setting_active_pickup_alert = models.CharField(max_length=32, blank=True)
+    # Vendor-specific per-line config (CCM MWI policy, partition usage,
+    # ring-setting variants, recording flag, etc.) lives here so the line
+    # schema doesn't bake in any one vendor's vocabulary.
+    vendor_extras = models.JSONField(default=dict, blank=True)
 
     class Meta:
         """Meta options for Line."""
@@ -389,12 +344,13 @@ class BusyLampField(BaseModel):
 
 
 class PhoneServiceUrl(BaseModel):
-    """A Service URL button on a phone.
+    """A service-launching button on a phone.
 
-    Cisco IP phones can have buttons that launch XML services (Extension
-    Mobility, custom directories, weather widgets, etc.). The URL is
-    typically a CCM-templated string with #DEVICENAME# / #EMCC# variables
-    expanded at click time.
+    Vendor-agnostic concept: a button bound to a URL that the phone
+    fetches when pressed. CCM XML services (Extension Mobility, custom
+    directories), FreePBX HTTP softkeys, and other vendors' soft-button
+    URLs all map here. URLs may include vendor-specific template
+    variables (e.g. CCM's `#DEVICENAME#` / `#EMCC#`) expanded at click time.
     """
 
     phone = models.ForeignKey(

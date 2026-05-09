@@ -58,6 +58,19 @@
 | `missed_call_logging` | bool | |
 | `partition_usage` | "General" / etc. | |
 
+### Vendor-agnostic Phone/Line schema
+
+The Phone and Line models keep only general-telephony fields as columns;
+CCM-specific provisioning details (built-in-bridge, device-mobility,
+CSS refs, MTP, button/softkey templates, MWI policy, partition usage,
+ring-setting variants, etc.) live in `vendor_extras` so the schema stays
+vendor-portable. See `models.md` for the full key list per model.
+
+`Phone.media_zone` is the vendor-agnostic name for the media/bandwidth
+admission boundary — Cisco calls it Location, Avaya calls it Network
+Region, FreePBX deployments may call it site or tenant. Stored as a
+free-form CharField so any vendor can populate it.
+
 ### Hunt subsystem
 
 Three first-class records and two through-tables, in the order CCM

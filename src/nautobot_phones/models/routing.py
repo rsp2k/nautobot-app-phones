@@ -75,11 +75,12 @@ class Trunk(PrimaryModel):
 
 
 class RouteList(PrimaryModel):
-    """A CCM Route List — an ordered collection of RouteGroups.
+    """An ordered priority list of RouteGroups (vendor-agnostic).
 
     Route patterns target a RouteList, which evaluates its member groups
-    in priority order. The first group with an available device handles
-    the call.
+    in priority order — the first group with an available device handles
+    the call. Maps to CCM's Route List; FreePBX outbound-route priorities
+    follow the same shape.
     """
 
     name = models.CharField(max_length=100)
@@ -302,21 +303,18 @@ class RoutePattern(PrimaryModel):
 
 
 class TranslationPattern(PrimaryModel):
-    """A digit-translation pattern (CCM TransPattern).
+    """A digit-translation pattern applied before route-pattern matching.
 
     Matches a dialed number, applies digit transformations (prefix/strip/
-    mask) per CCM config, and re-routes the call through the dial plan.
-    Distinct from RoutePattern — translation patterns don't have a
-    direct destination, they REWRITE digits and let the dial plan
-    re-evaluate them.
+    mask), and re-routes the call through the dial plan. Distinct from
+    RoutePattern — translation patterns don't have a direct destination,
+    they REWRITE digits and let the dial plan re-evaluate them.
 
-    Field grouping mirrors the CCM admin form's three sections:
-    Pattern Definition, Calling Party Transformations, and Called
-    Party Transformations. Long-tail dropdowns that almost always
-    sit at "Default" / "Cisco CallManager" (presentation bits,
-    numbering plans, number types, connected-party transformations)
-    live in `vendor_extras` to keep the schema readable while still
-    preserving full fidelity from the source cluster.
+    Vendor-agnostic concept: maps to CCM's TransPattern, FreePBX dialplan
+    rewrite rules, Asterisk dialplan logic. Field grouping mirrors CCM's
+    admin form (Pattern Definition / Calling Party / Called Party
+    Transformations) since that's the most common operator workflow.
+    Long-tail vendor-specific dropdowns live in `vendor_extras`.
     """
 
     # ---- Pattern Definition --------------------------------------------------
@@ -442,12 +440,9 @@ class HuntList(PrimaryModel):
         related_name="hunt_lists",
     )
     description = models.CharField(max_length=200, blank=True)
-    call_manager_group = models.CharField(
-        max_length=100, blank=True,
-        help_text="CCM Call Manager Group this hunt list registers against.",
-    )
     route_list_enabled = models.BooleanField(default=True)
     voice_mail_usage = models.BooleanField(default=False)
+    # CCM-specific concepts (callManagerGroupName etc.) live here.
     vendor_extras = models.JSONField(default=dict, blank=True)
     line_groups = models.ManyToManyField(
         to="nautobot_phones.LineGroup",

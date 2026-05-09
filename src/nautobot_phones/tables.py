@@ -142,7 +142,7 @@ class PhoneTable(BaseTable):
     )
     phone_system = tables.LinkColumn()
     device_profile = tables.LinkColumn()
-    ccm_location = tables.Column(verbose_name="CCM Location")
+    media_zone = tables.Column(verbose_name="Media Zone")
     owner_user_id = tables.Column(verbose_name="Owner")
     actions = ButtonsColumn(models.Phone)
 
@@ -150,7 +150,7 @@ class PhoneTable(BaseTable):
         model = models.Phone
         fields = (
             "pk", "device_name", "device_kind", "mac_address", "model", "description",
-            "phone_system", "physical_location", "ccm_location",
+            "phone_system", "physical_location", "media_zone",
             "device_profile", "owner_user_id",
             "registration_status", "last_registered_ip",
             "active_load", "inactive_load", "live_login_user",
@@ -158,7 +158,7 @@ class PhoneTable(BaseTable):
         )
         default_columns = (
             "pk", "device_name", "device_kind", "description", "mac_address", "model",
-            "phone_system", "ccm_location", "device_profile",
+            "phone_system", "media_zone", "device_profile",
             "last_registered_ip", "actions",
         )
 
@@ -291,8 +291,7 @@ class LineTable(BaseTable):
         model = models.Line
         fields = (
             "button_index", "phone", "directory_number", "label", "ring_setting",
-            "max_num_calls", "busy_trigger", "mwl_policy", "recording_flag",
-            "partition_usage",
+            "max_num_calls", "busy_trigger",
         )
         default_columns = (
             "button_index", "phone", "directory_number", "label",
@@ -464,11 +463,11 @@ class HuntListTable(BaseTable):
     class Meta(BaseTable.Meta):
         model = models.HuntList
         fields = (
-            "pk", "name", "phone_system", "description", "call_manager_group",
+            "pk", "name", "phone_system", "description",
             "route_list_enabled", "voice_mail_usage", "actions",
         )
         default_columns = (
-            "pk", "name", "phone_system", "description", "call_manager_group",
+            "pk", "name", "phone_system", "description",
             "actions",
         )
 
