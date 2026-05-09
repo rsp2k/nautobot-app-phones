@@ -71,7 +71,7 @@ class PhoneFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.Phone
-        fields = ["device_name", "mac_address", "device_kind", "phone_system", "registration_status", "device_pool", "owner_user_id", "ccm_location"]
+        fields = ["device_name", "mac_address", "device_kind", "phone_system", "registration_status", "device_profile", "owner_user_id", "ccm_location"]
 
 
 class TrunkFilterSet(NautobotFilterSet):
@@ -144,3 +144,27 @@ class LineGroupFilterSet(NautobotFilterSet):
     class Meta:
         model = models.LineGroup
         fields = ["name", "phone_system", "distribution_algorithm", "auto_log_off_hunt"]
+
+
+class DeviceProfileFilterSet(NautobotFilterSet):
+    """Filter set for DeviceProfile list view."""
+
+    class Meta:
+        model = models.DeviceProfile
+        fields = ["name", "phone_system", "description"]
+
+
+class VoicemailProfileFilterSet(NautobotFilterSet):
+    """Filter set for VoicemailProfile list view."""
+
+    class Meta:
+        model = models.VoicemailProfile
+        fields = ["name", "phone_system", "is_default", "pilot_dn"]
+
+
+class CallPickupGroupFilterSet(NautobotFilterSet):
+    """Filter set for CallPickupGroup list view."""
+
+    class Meta:
+        model = models.CallPickupGroup
+        fields = ["name", "phone_system", "pattern", "partition"]

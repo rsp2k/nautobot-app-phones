@@ -35,6 +35,10 @@ section of the [Sync Reference](sync_reference.md) for field details.
 | `LineGroup` | `PrimaryModel` | (`phone_system`, `name`) | Ordered set of DNs + hunt algorithm |
 | `HuntListMember` | `BaseModel` | (`hunt_list`, `line_group`) | Through-table with selection_order |
 | `LineGroupMember` | `BaseModel` | (`line_group`, `directory_number`) | Through-table with line_selection_order |
+| `DeviceProfile` | `PrimaryModel` | (`phone_system`, `name`) | Vendor-agnostic device-config bundle (CCM DevicePool / FreePBX template) |
+| `VoicemailProfile` | `PrimaryModel` | (`phone_system`, `name`) | Voicemail box config |
+| `CallPickupGroup` | `PrimaryModel` | (`phone_system`, `name`) | Pattern that picks up ringing peers |
+| `CallPickupGroupMember` | `BaseModel` | (`pickup_group`, `directory_number`) | Through-table with priority |
 
 ## Vendor-specific data: `vendor_extras` JSONField
 
@@ -47,6 +51,8 @@ CCM-specific fields not modeled as columns. Examples:
 | `AnalogGateway` | `module_units` (list of `{unit_index, subunit_index, subunit_product}` dicts) |
 | `RoutePattern` | (currently empty by default) |
 | `TranslationPattern` | Long-tail Cisco fields (presentation bits, numbering plans, number types) |
+| `DeviceProfile` | CCM-specific bundled refs: `callManagerGroupName`, `regionName`, `locationName`, `dateTimeSettingName`, `srstName`, `mediaResourceListName`, `networkLocale`, etc. (FreePBX populates differently or leaves empty) |
+| `VoicemailProfile` | `voiceMailboxMask` (CCM-specific) |
 
 Filterable via Nautobot's standard JSON filtering:
 

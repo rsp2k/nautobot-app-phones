@@ -78,6 +78,23 @@ phrases as CCM stores them (e.g. `Try next member; then, try next group
 in Hunt List`); these can be 50 chars long, so the columns are sized at
 100.
 
+### Vendor-agnostic feature config
+
+Three vendor-agnostic shared-config models populated from CCM listX/getX
+operations. Designed so a FreePBX (or other vendor) adapter can populate
+them without schema migrations.
+
+| Model | Source AXL ops | Notes |
+|-------|---------------|-------|
+| `DeviceProfile` | `listDevicePool` + `getDevicePool` | Vendor-agnostic name for "named device-config bundle". CCM-specific refs (CMG, Region, Location, DateTimeGroup, SRST, MRGL) go in `vendor_extras` rather than first-class tables — those concepts are CCM-only. |
+| `VoicemailProfile` | `listVoiceMailProfile` + `getVoiceMailProfile` | Pilot DN, mailbox mask, default flag. `DirectoryNumber.voicemail_profile` is a FK to this. |
+| `CallPickupGroup` | `listCallPickupGroup` + `getCallPickupGroup` | Pattern dialed to invoke pickup. Note: AXL's `listCallPickupGroup` searches by `pattern` not `name`. |
+| `CallPickupGroupMember` | (`listLine` callPickupGroupName) | DN→Group association. CCM stores it on the DN side via `callPickupGroupName`, not in the group's `members` (which is the chained-fall-through *between groups*). Adapter walks listLine to collect them. |
+
+`Phone.device_profile` and `DirectoryNumber.voicemail_profile` are
+nullable FKs — they resolve to None if the source CCM record has no
+profile assigned.
+
 ## Sync ordering (top-level)
 
 DiffSync's `top_level` tuple defines load order, which matters for
@@ -85,12 +102,14 @@ identifier resolution (children reference parents by natural key):
 
 1. `phone_system` — root
 2. Dial plan: `partition`, `calling_search_space`, `css_partition_membership`
-3. Numbers: `directory_number`
-4. Endpoints: `phone`
-5. Phone children: `line`, `speed_dial`, `busy_lamp_field`, `phone_service_url`
-6. Routing: `trunk`, `route_list`, `route_group`, `route_pattern`, `translation_pattern`
-7. Analog: `analog_gateway`, `analog_port`
-8. Hunt: `line_group`, `hunt_list`, `line_group_member`, `hunt_list_member`, `hunt_pilot`
+3. Feature config: `device_profile`, `voicemail_profile` (FK targets for Phone/DN)
+4. Numbers: `directory_number`
+5. Endpoints: `phone`
+6. Phone children: `line`, `speed_dial`, `busy_lamp_field`, `phone_service_url`
+7. Routing: `trunk`, `route_list`, `route_group`, `route_pattern`, `translation_pattern`
+8. Analog: `analog_gateway`, `analog_port`
+9. Hunt: `line_group`, `hunt_list`, `line_group_member`, `hunt_list_member`, `hunt_pilot`
+10. Pickup: `call_pickup_group`, `call_pickup_group_member`
 
 Within the hunt subsystem, groups must load before their member rows
 (member identifiers reference the group by name), and HuntList must

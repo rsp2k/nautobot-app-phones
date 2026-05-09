@@ -88,13 +88,13 @@ class DirectoryNumberModel(NautobotModel):
     _model = models.DirectoryNumber
     _modelname = "directory_number"
     _identifiers = ("extension", "partition__name", "partition__phone_system__name")
-    _attributes = ("alerting_name", "voicemail_profile", "vendor_extras")
+    _attributes = ("alerting_name", "voicemail_profile__name", "vendor_extras")
 
     extension: str
     partition__name: str
     partition__phone_system__name: str
     alerting_name: str = ""
-    voicemail_profile: str = ""
+    voicemail_profile__name: Optional[str] = None
     vendor_extras: dict = {}
 
 
@@ -118,7 +118,7 @@ class PhoneModel(NautobotModel):
         "active_load", "inactive_load", "live_login_user", "status_reason",
         "live_status_polled_at",
         # Device Information
-        "device_pool", "common_phone_profile", "common_device_configuration",
+        "device_profile__name", "common_phone_profile", "common_device_configuration",
         "phone_button_template", "softkey_template",
         "owner_user_id", "mobility_user_id",
         "built_in_bridge", "privacy", "device_mobility_mode",
@@ -148,7 +148,7 @@ class PhoneModel(NautobotModel):
     status_reason: str = ""
     live_status_polled_at: Optional[datetime] = None
     # Device Information
-    device_pool: str = ""
+    device_profile__name: Optional[str] = None
     common_phone_profile: str = ""
     common_device_configuration: str = ""
     phone_button_template: str = ""
@@ -543,3 +543,76 @@ class AnalogPortModel(NautobotModel):
     port_type: str
     directory_number__extension: Optional[str] = None
     directory_number__partition__name: Optional[str] = None
+
+
+# --------------------------------------------------------------------------
+# Vendor-agnostic feature config — DeviceProfile, VoicemailProfile,
+# CallPickupGroup. These are referenced by FK from Phone/DN, so they MUST
+# load before Phone and DirectoryNumber in the adapter top_level.
+# --------------------------------------------------------------------------
+
+
+class DeviceProfileModel(NautobotModel):
+    """DiffSync model for DeviceProfile (CCM DevicePool / FreePBX device template)."""
+
+    _model = models.DeviceProfile
+    _modelname = "device_profile"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = ("description", "vendor_extras")
+
+    name: str
+    phone_system__name: str
+    description: str = ""
+    vendor_extras: dict = {}
+
+
+class VoicemailProfileModel(NautobotModel):
+    """DiffSync model for VoicemailProfile."""
+
+    _model = models.VoicemailProfile
+    _modelname = "voicemail_profile"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = ("description", "pilot_dn", "is_default", "vendor_extras")
+
+    name: str
+    phone_system__name: str
+    description: str = ""
+    pilot_dn: str = ""
+    is_default: bool = False
+    vendor_extras: dict = {}
+
+
+class CallPickupGroupModel(NautobotModel):
+    """DiffSync model for CallPickupGroup."""
+
+    _model = models.CallPickupGroup
+    _modelname = "call_pickup_group"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = (
+        "pattern", "partition__name", "description", "vendor_extras",
+    )
+
+    name: str
+    phone_system__name: str
+    pattern: str = ""
+    partition__name: Optional[str] = None
+    description: str = ""
+    vendor_extras: dict = {}
+
+
+class CallPickupGroupMemberModel(NautobotModel):
+    """DiffSync through-table for CallPickupGroup ↔ DirectoryNumber."""
+
+    _model = models.CallPickupGroupMember
+    _modelname = "call_pickup_group_member"
+    _identifiers = (
+        "pickup_group__name", "pickup_group__phone_system__name",
+        "directory_number__extension", "directory_number__partition__name",
+    )
+    _attributes = ("priority",)
+
+    pickup_group__name: str
+    pickup_group__phone_system__name: str
+    directory_number__extension: str
+    directory_number__partition__name: str
+    priority: int = 0

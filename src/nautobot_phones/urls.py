@@ -30,5 +30,8 @@ router.register("analog-gateways", views.AnalogGatewayUIViewSet)
 router.register("hunt-pilots", views.HuntPilotUIViewSet)
 router.register("hunt-lists", views.HuntListUIViewSet)
 router.register("line-groups", views.LineGroupUIViewSet)
+router.register("device-profiles", views.DeviceProfileUIViewSet)
+router.register("voicemail-profiles", views.VoicemailProfileUIViewSet)
+router.register("call-pickup-groups", views.CallPickupGroupUIViewSet)
 
 urlpatterns = router.urls

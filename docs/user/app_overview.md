@@ -41,6 +41,16 @@ The app pulls data from a CCM cluster's **AXL SOAP API** (configuration) and
 - `LineGroup` — ordered set of DNs with a distribution algorithm (Top Down,
   Circular, Broadcast, Longest Idle Time)
 
+### Features (vendor-agnostic shared config)
+- `DeviceProfile` — named bundle of device-config defaults applied to phones
+  (maps to CCM DevicePool / FreePBX device template). Cisco-specific bundled
+  refs (Region, Location, CMG, etc.) live in `vendor_extras` since other
+  vendors don't have those concepts.
+- `VoicemailProfile` — voicemail box config; referenced by FK from
+  DirectoryNumber.
+- `CallPickupGroup` — extension that grabs a ringing peer (e.g. `*8`).
+  Member DNs join through `CallPickupGroupMember`.
+
 ### Analog
 - `AnalogGateway` — Cisco voice gateway (VG450, VG350, etc.)
 - `AnalogPort` — FXS/FXO port on a gateway, optionally bound to a DN

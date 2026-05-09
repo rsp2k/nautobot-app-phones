@@ -164,3 +164,27 @@ class LineGroupMemberAPIViewSet(NautobotModelViewSet):
     queryset = models.LineGroupMember.objects.all()
     serializer_class = serializers.LineGroupMemberSerializer
     filterset_class = None
+
+
+class DeviceProfileAPIViewSet(NautobotModelViewSet):
+    queryset = models.DeviceProfile.objects.all()
+    serializer_class = serializers.DeviceProfileSerializer
+    filterset_class = filters.DeviceProfileFilterSet
+
+
+class VoicemailProfileAPIViewSet(NautobotModelViewSet):
+    queryset = models.VoicemailProfile.objects.all()
+    serializer_class = serializers.VoicemailProfileSerializer
+    filterset_class = filters.VoicemailProfileFilterSet
+
+
+class CallPickupGroupAPIViewSet(NautobotModelViewSet):
+    queryset = models.CallPickupGroup.objects.all()
+    serializer_class = serializers.CallPickupGroupSerializer
+    filterset_class = filters.CallPickupGroupFilterSet
+
+
+class CallPickupGroupMemberAPIViewSet(NautobotModelViewSet):
+    queryset = models.CallPickupGroupMember.objects.all()
+    serializer_class = serializers.CallPickupGroupMemberSerializer
+    filterset_class = None

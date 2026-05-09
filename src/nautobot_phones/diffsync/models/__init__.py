@@ -4,8 +4,11 @@ from nautobot_phones.diffsync.models.base import (
     AnalogGatewayModel,
     AnalogPortModel,
     BusyLampFieldModel,
+    CallPickupGroupMemberModel,
+    CallPickupGroupModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
+    DeviceProfileModel,
     DirectoryNumberModel,
     HuntListMemberModel,
     HuntListModel,
@@ -23,6 +26,7 @@ from nautobot_phones.diffsync.models.base import (
     SpeedDialModel,
     TranslationPatternModel,
     TrunkModel,
+    VoicemailProfileModel,
 )
 
 __all__ = [
@@ -30,7 +34,10 @@ __all__ = [
     "AnalogPortModel",
     "BusyLampFieldModel",
     "CSSPartitionMembershipModel",
+    "CallPickupGroupMemberModel",
+    "CallPickupGroupModel",
     "CallingSearchSpaceModel",
+    "DeviceProfileModel",
     "DirectoryNumberModel",
     "HuntListMemberModel",
     "HuntListModel",
@@ -48,4 +55,5 @@ __all__ = [
     "SpeedDialModel",
     "TranslationPatternModel",
     "TrunkModel",
+    "VoicemailProfileModel",
 ]

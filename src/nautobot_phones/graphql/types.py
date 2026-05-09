@@ -157,6 +157,29 @@ class LineGroupMemberType(OptimizedNautobotObjectType):
         model = models.LineGroupMember
 
 
+class DeviceProfileType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.DeviceProfile
+        filterset_class = filters.DeviceProfileFilterSet
+
+
+class VoicemailProfileType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.VoicemailProfile
+        filterset_class = filters.VoicemailProfileFilterSet
+
+
+class CallPickupGroupType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.CallPickupGroup
+        filterset_class = filters.CallPickupGroupFilterSet
+
+
+class CallPickupGroupMemberType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.CallPickupGroupMember
+
+
 graphql_types = [
     PhoneSystemType,
     CarrierType,
@@ -184,4 +207,8 @@ graphql_types = [
     HuntListMemberType,
     LineGroupType,
     LineGroupMemberType,
+    DeviceProfileType,
+    VoicemailProfileType,
+    CallPickupGroupType,
+    CallPickupGroupMemberType,
 ]

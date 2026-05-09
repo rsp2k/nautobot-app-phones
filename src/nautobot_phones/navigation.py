@@ -101,6 +101,27 @@ menu_items = (
                 ),
             ),
             NavMenuGroup(
+                name="Features",
+                weight=425,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:deviceprofile_list",
+                        name="Device Profiles",
+                        permissions=["nautobot_phones.view_deviceprofile"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:voicemailprofile_list",
+                        name="Voicemail Profiles",
+                        permissions=["nautobot_phones.view_voicemailprofile"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:callpickupgroup_list",
+                        name="Call Pickup Groups",
+                        permissions=["nautobot_phones.view_callpickupgroup"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
                 name="Hunt",
                 weight=450,
                 items=(

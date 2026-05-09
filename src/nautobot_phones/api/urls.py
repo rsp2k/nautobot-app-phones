@@ -35,6 +35,10 @@ router.register("hunt-lists", views.HuntListAPIViewSet)
 router.register("hunt-list-members", views.HuntListMemberAPIViewSet)
 router.register("line-groups", views.LineGroupAPIViewSet)
 router.register("line-group-members", views.LineGroupMemberAPIViewSet)
+router.register("device-profiles", views.DeviceProfileAPIViewSet)
+router.register("voicemail-profiles", views.VoicemailProfileAPIViewSet)
+router.register("call-pickup-groups", views.CallPickupGroupAPIViewSet)
+router.register("call-pickup-group-members", views.CallPickupGroupMemberAPIViewSet)
 
 app_name = "nautobot_phones-api"
 urlpatterns = router.urls

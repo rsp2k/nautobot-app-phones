@@ -27,8 +27,11 @@ from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     AnalogPortModel,
     BusyLampFieldModel,
+    CallPickupGroupMemberModel,
+    CallPickupGroupModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
+    DeviceProfileModel,
     DirectoryNumberModel,
     HuntListMemberModel,
     HuntListModel,
@@ -46,6 +49,7 @@ from nautobot_phones.diffsync.models import (
     SpeedDialModel,
     TranslationPatternModel,
     TrunkModel,
+    VoicemailProfileModel,
 )
 
 
@@ -91,6 +95,8 @@ class CUCMSourceAdapter(Adapter):
     partition = PartitionModel
     calling_search_space = CallingSearchSpaceModel
     css_partition_membership = CSSPartitionMembershipModel
+    device_profile = DeviceProfileModel
+    voicemail_profile = VoicemailProfileModel
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
@@ -109,12 +115,17 @@ class CUCMSourceAdapter(Adapter):
     hunt_list_member = HuntListMemberModel
     line_group_member = LineGroupMemberModel
     hunt_pilot = HuntPilotModel
+    call_pickup_group = CallPickupGroupModel
+    call_pickup_group_member = CallPickupGroupMemberModel
 
     top_level = (
         "phone_system",
         "partition",
         "calling_search_space",
         "css_partition_membership",
+        # Vendor-agnostic feature config — load before DN/Phone for FK resolution.
+        "device_profile",
+        "voicemail_profile",
         "directory_number",
         "phone",
         "line",
@@ -133,6 +144,8 @@ class CUCMSourceAdapter(Adapter):
         "line_group_member",
         "hunt_list_member",
         "hunt_pilot",
+        "call_pickup_group",
+        "call_pickup_group_member",
     )
 
     type = "cisco-ucm"
@@ -221,6 +234,11 @@ class CUCMSourceAdapter(Adapter):
 
         self._load_partitions(ps.name)
         self._load_calling_search_spaces(ps.name)
+        # Vendor-agnostic feature config — must precede DN/Phone load so
+        # the FK lookups (voicemail_profile__name, device_profile__name)
+        # can resolve against already-loaded records.
+        self._load_device_profiles(ps.name)
+        self._load_voicemail_profiles(ps.name)
         self._load_directory_numbers(ps.name)
         if self.enrich_phone_ip and self.ris_client is not None:
             self._fetch_ris_data()
@@ -232,6 +250,8 @@ class CUCMSourceAdapter(Adapter):
         self._load_translation_patterns(ps.name)
         self._load_gateways_and_ports(ps.name)
         self._load_hunt_subsystem(ps.name)
+        # Pickup groups load after DNs so member-FK lookups resolve.
+        self._load_call_pickup_groups(ps.name)
 
     # -- Per-collection loaders ----------------------------------------------
 
@@ -298,7 +318,7 @@ class CUCMSourceAdapter(Adapter):
                 partition__name=partition_name,
                 partition__phone_system__name=ps_name,
                 alerting_name=_get(row, "alertingName", "") or "",
-                voicemail_profile=_get(_get(row, "voiceMailProfileName"), "_value_1", "") or "",
+                voicemail_profile__name=(_get(_get(row, "voiceMailProfileName"), "_value_1", "") or None),
                 vendor_extras=_extract_extras(row, exclude={"pattern", "routePartitionName", "alertingName"}),
             ))
 
@@ -405,8 +425,9 @@ class CUCMSourceAdapter(Adapter):
                 # CCM Location (Call Admission Control) + Network Location
                 ccm_location=_fk_name("locationName"),
                 network_location=(_get(phone_row, "networkLocation", "") or ""),
-                # Device Information
-                device_pool=_fk_name("devicePoolName"),
+                # Device Information — device_profile is our vendor-agnostic
+                # name; AXL's `devicePoolName` maps to our DeviceProfile.
+                device_profile__name=(_fk_name("devicePoolName") or None),
                 common_phone_profile=_fk_name("commonPhoneConfigName"),
                 common_device_configuration=_fk_name("commonDeviceConfigName"),
                 phone_button_template=_fk_name("phoneTemplateName"),
@@ -1032,6 +1053,163 @@ class CUCMSourceAdapter(Adapter):
                 # a follow-up pass if operationally needed.
                 forward_hunt_no_answer_destination="",
                 forward_hunt_busy_destination="",
+            ))
+
+    def _load_device_profiles(self, ps_name: str) -> None:
+        """List CCM DevicePools and emit DeviceProfile DiffSync records.
+
+        DevicePool is CCM's name; we map it to our vendor-agnostic
+        DeviceProfile model. CCM-specific ancillary names (CMG, region,
+        location, date-time setting, SRST, MRGL, network locale) live in
+        `vendor_extras` rather than getting their own first-class tables —
+        those concepts are CCM-only and would be perpetually NULL for any
+        vendor that doesn't have call-admission-control bandwidth zones.
+
+        listDevicePool returns scalar metadata; getDevicePool is required
+        to expose the bundled FK refs (callManagerGroupName, regionName, etc.).
+        """
+        result = self.client._service.listDevicePool(
+            searchCriteria={"name": "%"}, returnedTags={"name": ""},
+        )
+        pools = _get(_get(result, "return"), "devicePool", []) or []
+        for row in pools:
+            name = _get(row, "name")
+            if not name:
+                continue
+            try:
+                detail = self.client._service.getDevicePool(name=name)
+                dp = _get(_get(detail, "return"), "devicePool")
+            except Exception:
+                dp = None
+            extras: dict = {}
+            if dp is not None:
+                for fld in (
+                    "callManagerGroupName", "regionName", "locationName",
+                    "dateTimeSettingName", "srstName", "mediaResourceListName",
+                    "networkLocale", "networkHoldMohAudioSourceId",
+                    "userHoldMohAudioSourceId", "automatedAlternateRoutingCssName",
+                    "physicalLocationName", "deviceMobilityGroupName",
+                    "callingPartyNationalPrefix", "callingPartyInternationalPrefix",
+                    "callingPartyUnknownPrefix", "callingPartySubscriberPrefix",
+                ):
+                    val = _get(dp, fld)
+                    if hasattr(val, "_value_1"):
+                        val = _get(val, "_value_1", None)
+                    if val not in (None, ""):
+                        extras[fld] = val
+            self.add(self.device_profile(
+                name=name, phone_system__name=ps_name,
+                description="", vendor_extras=extras,
+            ))
+
+    def _load_voicemail_profiles(self, ps_name: str) -> None:
+        """List CCM VoiceMailProfiles and emit VoicemailProfile records.
+
+        listVoiceMailProfile returns name + UUID only; getVoiceMailProfile
+        gives us pilot DN, mailbox mask, default flag, etc.
+        """
+        result = self.client._service.listVoiceMailProfile(
+            searchCriteria={"name": "%"}, returnedTags={"name": ""},
+        )
+        profiles = _get(_get(result, "return"), "voiceMailProfile", []) or []
+        for row in profiles:
+            name = _get(row, "name")
+            if not name:
+                continue
+            try:
+                detail = self.client._service.getVoiceMailProfile(name=name)
+                vp = _get(_get(detail, "return"), "voiceMailProfile")
+            except Exception:
+                continue
+            pilot_ref = _get(vp, "voiceMailPilot")
+            pilot_dn = _get(pilot_ref, "_value_1", "") if pilot_ref is not None else ""
+            mask = _get(vp, "voiceMailboxMask", "") or ""
+            is_default = _axl_bool(_get(vp, "isDefault", False))
+            extras: dict = {}
+            if mask:
+                extras["voiceMailboxMask"] = mask
+            self.add(self.voicemail_profile(
+                name=name, phone_system__name=ps_name,
+                description=(_get(vp, "description", "") or ""),
+                pilot_dn=(pilot_dn or ""),
+                is_default=is_default,
+                vendor_extras=extras,
+            ))
+
+    def _load_call_pickup_groups(self, ps_name: str) -> None:
+        """List CCM CallPickupGroups + their member DNs.
+
+        listCallPickupGroup uses `pattern` as the search key (not `name`)
+        — same convention as listLine and listRoutePattern. Discovered
+        empirically; the AXL schema isn't consistent across operations.
+
+        Members come from getCallPickupGroup; each carries the picked-up
+        DN's pattern + partition plus a priority. We resolve the DN
+        through DiffSync's already-loaded directory_number records.
+        """
+        try:
+            result = self.client._service.listCallPickupGroup(
+                searchCriteria={"pattern": "%"},
+                returnedTags={"name": "", "pattern": ""},
+            )
+        except Exception:
+            return
+        groups = _get(_get(result, "return"), "callPickupGroup", []) or []
+        for row in groups:
+            name = _get(row, "name")
+            if not name:
+                continue
+            try:
+                detail = self.client._service.getCallPickupGroup(name=name)
+                grp = _get(_get(detail, "return"), "callPickupGroup")
+            except Exception:
+                continue
+            partition_name = self._resolve_partition(_get(grp, "routePartitionName"))
+            partition_id = partition_name if partition_name != self.NULL_PARTITION_NAME else None
+            self.add(self.call_pickup_group(
+                name=name,
+                phone_system__name=ps_name,
+                pattern=(_get(grp, "pattern", "") or ""),
+                partition__name=partition_id,
+                description=(_get(grp, "description", "") or ""),
+                vendor_extras={},
+            ))
+            # Note: AXL's getCallPickupGroup `.members.member` is the
+            # chained-fall-through relationship between groups, NOT a list of
+            # member DNs. The DN→PickupGroup association lives on the DN
+            # side as `callPickupGroupName`, populated below in a separate
+            # listLine pass.
+
+        # DN→PickupGroup membership lookup: walk listLine, capture each DN's
+        # callPickupGroupName, emit one CallPickupGroupMember per DN that
+        # belongs to a group. Single-pass; cheap.
+        try:
+            line_result = self.client._service.listLine(
+                searchCriteria={"pattern": "%"},
+                returnedTags={
+                    "pattern": "",
+                    "routePartitionName": {"_value_1": ""},
+                    "callPickupGroupName": {"_value_1": ""},
+                },
+            )
+        except Exception:
+            return
+        lines = _get(_get(line_result, "return"), "line", []) or []
+        for ln in lines:
+            pickup_ref = _get(ln, "callPickupGroupName")
+            pickup_name = _get(pickup_ref, "_value_1", "") if pickup_ref is not None else ""
+            if not pickup_name:
+                continue
+            dn_pattern = _get(ln, "pattern", "") or ""
+            if not dn_pattern:
+                continue
+            dn_part = self._resolve_partition(_get(ln, "routePartitionName"))
+            self.add(self.call_pickup_group_member(
+                pickup_group__name=pickup_name,
+                pickup_group__phone_system__name=ps_name,
+                directory_number__extension=dn_pattern,
+                directory_number__partition__name=dn_part,
+                priority=0,
             ))
 
 

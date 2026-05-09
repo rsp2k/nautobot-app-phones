@@ -141,7 +141,7 @@ class PhoneTable(BaseTable):
         accessor="location", verbose_name="Physical Location", orderable=False,
     )
     phone_system = tables.LinkColumn()
-    device_pool = tables.Column()
+    device_profile = tables.LinkColumn()
     ccm_location = tables.Column(verbose_name="CCM Location")
     owner_user_id = tables.Column(verbose_name="Owner")
     actions = ButtonsColumn(models.Phone)
@@ -151,14 +151,14 @@ class PhoneTable(BaseTable):
         fields = (
             "pk", "device_name", "device_kind", "mac_address", "model", "description",
             "phone_system", "physical_location", "ccm_location",
-            "device_pool", "owner_user_id",
+            "device_profile", "owner_user_id",
             "registration_status", "last_registered_ip",
             "active_load", "inactive_load", "live_login_user",
             "actions",
         )
         default_columns = (
             "pk", "device_name", "device_kind", "description", "mac_address", "model",
-            "phone_system", "ccm_location", "device_pool",
+            "phone_system", "ccm_location", "device_profile",
             "last_registered_ip", "actions",
         )
 
@@ -519,3 +519,66 @@ class LineGroupMemberTable(BaseTable):
         model = models.LineGroupMember
         fields = ("line_selection_order", "directory_number", "line_group")
         default_columns = ("line_selection_order", "directory_number")
+
+
+# --------------------------------------------------------------------------
+# Vendor-agnostic feature config tables — DeviceProfile, VoicemailProfile,
+# CallPickupGroup. CallPickupGroupMember is nested-only on parent details.
+# --------------------------------------------------------------------------
+
+
+class DeviceProfileTable(BaseTable):
+    """List-view table for DeviceProfile (CCM DevicePool / FreePBX template)."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.DeviceProfile)
+
+    class Meta(BaseTable.Meta):
+        model = models.DeviceProfile
+        fields = ("pk", "name", "phone_system", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "description", "actions")
+
+
+class VoicemailProfileTable(BaseTable):
+    """List-view table for VoicemailProfile."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    is_default = tables.BooleanColumn(verbose_name="Default")
+    actions = ButtonsColumn(models.VoicemailProfile)
+
+    class Meta(BaseTable.Meta):
+        model = models.VoicemailProfile
+        fields = ("pk", "name", "phone_system", "pilot_dn", "is_default", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "pilot_dn", "is_default", "actions")
+
+
+class CallPickupGroupTable(BaseTable):
+    """List-view table for CallPickupGroup."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    partition = tables.LinkColumn()
+    actions = ButtonsColumn(models.CallPickupGroup)
+
+    class Meta(BaseTable.Meta):
+        model = models.CallPickupGroup
+        fields = ("pk", "name", "phone_system", "pattern", "partition", "description", "actions")
+        default_columns = ("pk", "name", "phone_system", "pattern", "partition", "description", "actions")
+
+
+class CallPickupGroupMemberTable(BaseTable):
+    """Member DNs embedded on CallPickupGroup detail (and DN detail)."""
+
+    pickup_group = tables.LinkColumn()
+    directory_number = tables.LinkColumn()
+    priority = tables.Column()
+
+    class Meta(BaseTable.Meta):
+        model = models.CallPickupGroupMember
+        fields = ("priority", "pickup_group", "directory_number")
+        default_columns = ("priority", "directory_number")

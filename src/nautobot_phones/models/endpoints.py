@@ -125,12 +125,14 @@ class Phone(PrimaryModel):
     )
 
     # ---- Device Information --------------------------------------------------
-    # CCM calls these "Device Pool", "Common Phone Profile", etc. We store
-    # them as the human-readable names (not FKs) since they're CCM-side
-    # organizational concepts that don't map cleanly to Nautobot models.
-    device_pool = models.CharField(
-        max_length=100, blank=True,
-        help_text="CCM Device Pool — groups phones with shared SRST/MRGL/region/date-time.",
+    # `device_profile` is our vendor-agnostic name for what CCM calls a
+    # "Device Pool" and FreePBX calls a device template — a named bundle
+    # of provisioning defaults applied to phones referencing it.
+    device_profile = models.ForeignKey(
+        to="nautobot_phones.DeviceProfile",
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="phones",
+        help_text="Vendor-agnostic device-config bundle. CCM DevicePool / FreePBX device template.",
     )
     common_phone_profile = models.CharField(max_length=100, blank=True)
     common_device_configuration = models.CharField(max_length=100, blank=True)

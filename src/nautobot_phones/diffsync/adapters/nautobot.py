@@ -22,8 +22,11 @@ from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     AnalogPortModel,
     BusyLampFieldModel,
+    CallPickupGroupMemberModel,
+    CallPickupGroupModel,
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
+    DeviceProfileModel,
     DirectoryNumberModel,
     HuntListMemberModel,
     HuntListModel,
@@ -41,6 +44,7 @@ from nautobot_phones.diffsync.models import (
     SpeedDialModel,
     TranslationPatternModel,
     TrunkModel,
+    VoicemailProfileModel,
 )
 
 
@@ -51,6 +55,10 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     partition = PartitionModel
     calling_search_space = CallingSearchSpaceModel
     css_partition_membership = CSSPartitionMembershipModel
+    # Vendor-agnostic feature config — referenced by FK from Phone/DN, so
+    # MUST load before them in top_level for natural-key resolution.
+    device_profile = DeviceProfileModel
+    voicemail_profile = VoicemailProfileModel
     directory_number = DirectoryNumberModel
     phone = PhoneModel
     line = LineModel
@@ -69,12 +77,18 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     hunt_list_member = HuntListMemberModel
     line_group_member = LineGroupMemberModel
     hunt_pilot = HuntPilotModel
+    call_pickup_group = CallPickupGroupModel
+    call_pickup_group_member = CallPickupGroupMemberModel
 
     top_level = (
         "phone_system",
         "partition",
         "calling_search_space",
         "css_partition_membership",
+        # Feature config (DeviceProfile / VoicemailProfile) loads before
+        # Phone and DN because those reference these via FK.
+        "device_profile",
+        "voicemail_profile",
         "directory_number",
         "phone",
         "line",
@@ -95,6 +109,9 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "line_group_member",
         "hunt_list_member",
         "hunt_pilot",
+        # Pickup group + members (DNs must already exist).
+        "call_pickup_group",
+        "call_pickup_group_member",
     )
 
     # Models that only get populated by per-phone getPhone enrichment.

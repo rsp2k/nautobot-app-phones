@@ -171,7 +171,7 @@ class PhoneForm(NautobotModelForm):
             "registration_status", "last_registered_ip",
             "ccm_location", "network_location",
             # Device Information
-            "device_pool", "common_phone_profile", "common_device_configuration",
+            "device_profile", "common_phone_profile", "common_device_configuration",
             "phone_button_template", "softkey_template",
             "owner_user_id", "mobility_user_id",
             "built_in_bridge", "privacy", "device_mobility_mode",
@@ -190,7 +190,7 @@ class PhoneFilterForm(NautobotFilterForm):
     """Filter sidebar form for Phone list view."""
 
     model = models.Phone
-    field_order = ("q", "device_name", "device_kind", "mac_address", "phone_system", "registration_status", "device_pool", "owner_user_id", "ccm_location")
+    field_order = ("q", "device_name", "device_kind", "mac_address", "phone_system", "registration_status", "device_profile", "owner_user_id", "ccm_location")
     q = forms.CharField(required=False, label="Search")
     device_kind = forms.MultipleChoiceField(choices=PhoneDeviceKindChoices, required=False, label="Device Kind")
     registration_status = forms.MultipleChoiceField(choices=RegistrationStatusChoices, required=False)
@@ -395,4 +395,56 @@ class LineGroupFilterForm(NautobotFilterForm):
 
     model = models.LineGroup
     field_order = ("q", "name", "phone_system", "distribution_algorithm")
+    q = forms.CharField(required=False, label="Search")
+
+
+# --------------------------------------------------------------------------
+# Vendor-agnostic feature config forms — DeviceProfile, VoicemailProfile,
+# CallPickupGroup.
+# --------------------------------------------------------------------------
+class DeviceProfileForm(NautobotModelForm):
+    """Create/edit form for DeviceProfile."""
+
+    class Meta:
+        model = models.DeviceProfile
+        fields = ("name", "phone_system", "description", "vendor_extras", "tags")
+
+
+class DeviceProfileFilterForm(NautobotFilterForm):
+    """Filter sidebar form for DeviceProfile list view."""
+
+    model = models.DeviceProfile
+    field_order = ("q", "name", "phone_system")
+    q = forms.CharField(required=False, label="Search")
+
+
+class VoicemailProfileForm(NautobotModelForm):
+    """Create/edit form for VoicemailProfile."""
+
+    class Meta:
+        model = models.VoicemailProfile
+        fields = ("name", "phone_system", "description", "pilot_dn", "is_default", "vendor_extras", "tags")
+
+
+class VoicemailProfileFilterForm(NautobotFilterForm):
+    """Filter sidebar form for VoicemailProfile list view."""
+
+    model = models.VoicemailProfile
+    field_order = ("q", "name", "phone_system", "is_default")
+    q = forms.CharField(required=False, label="Search")
+
+
+class CallPickupGroupForm(NautobotModelForm):
+    """Create/edit form for CallPickupGroup."""
+
+    class Meta:
+        model = models.CallPickupGroup
+        fields = ("name", "phone_system", "pattern", "partition", "description", "vendor_extras", "tags")
+
+
+class CallPickupGroupFilterForm(NautobotFilterForm):
+    """Filter sidebar form for CallPickupGroup list view."""
+
+    model = models.CallPickupGroup
+    field_order = ("q", "name", "phone_system", "pattern", "partition")
     q = forms.CharField(required=False, label="Search")

@@ -366,7 +366,7 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 section=SectionChoices.LEFT_HALF, weight=200,
                 label="Device Information",
                 fields=[
-                    "device_pool", "common_phone_profile", "common_device_configuration",
+                    "device_profile", "common_phone_profile", "common_device_configuration",
                     "phone_button_template", "softkey_template",
                     "owner_user_id", "mobility_user_id",
                     "built_in_bridge", "privacy", "device_mobility_mode",
@@ -679,6 +679,105 @@ class HuntListUIViewSet(NautobotUIViewSet):
                 table_class=tables.HuntPilotTable, table_filter="hunt_list",
                 table_title="Hunt Pilots Targeting This List",
                 exclude_columns=["hunt_list"],
+            ),
+        ),
+    )
+
+
+class DeviceProfileUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for DeviceProfile (CCM DevicePool / FreePBX device template).
+
+    Detail view surfaces the bundled CCM-specific config (CallManagerGroup,
+    Region, Location, etc.) directly from `vendor_extras` so operators can
+    see the full provisioning bundle without us schema-migrating those CCM
+    concepts into first-class Nautobot models.
+    """
+
+    queryset = models.DeviceProfile.objects.all()
+    table_class = tables.DeviceProfileTable
+    filterset_class = filters.DeviceProfileFilterSet
+    filterset_form_class = forms.DeviceProfileFilterForm
+    form_class = forms.DeviceProfileForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "description"],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                label="Bundled Config (vendor-specific)",
+                fields=["vendor_extras"],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.LEFT_HALF, weight=200,
+                table_class=tables.PhoneTable, table_filter="device_profile",
+                table_title="Phones using this profile", exclude_columns=["device_profile"],
+            ),
+        ),
+    )
+
+
+class VoicemailProfileUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for VoicemailProfile."""
+
+    queryset = models.VoicemailProfile.objects.all()
+    table_class = tables.VoicemailProfileTable
+    filterset_class = filters.VoicemailProfileFilterSet
+    filterset_form_class = forms.VoicemailProfileFilterForm
+    form_class = forms.VoicemailProfileForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=[
+                    "name", "phone_system", "description",
+                    "pilot_dn", "is_default", "vendor_extras",
+                ],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.DirectoryNumberTable,
+                table_filter="voicemail_profile",
+                table_title="Directory Numbers using this Voicemail Profile",
+                exclude_columns=["voicemail_profile"],
+            ),
+        ),
+    )
+
+
+class CallPickupGroupUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for CallPickupGroup with member DNs in a nested table."""
+
+    queryset = models.CallPickupGroup.objects.all()
+    table_class = tables.CallPickupGroupTable
+    filterset_class = filters.CallPickupGroupFilterSet
+    filterset_form_class = forms.CallPickupGroupFilterForm
+    form_class = forms.CallPickupGroupForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=["name", "phone_system", "pattern", "partition", "description"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.CallPickupGroupMemberTable,
+                table_filter="pickup_group",
+                table_title="Member Directory Numbers",
+                exclude_columns=["pickup_group"],
+                order_by_fields=["priority", "directory_number__extension"],
             ),
         ),
     )

@@ -167,3 +167,27 @@ class LineGroupMemberSerializer(NautobotModelSerializer):
     class Meta:
         model = models.LineGroupMember
         fields = "__all__"
+
+
+class DeviceProfileSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.DeviceProfile
+        fields = "__all__"
+
+
+class VoicemailProfileSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.VoicemailProfile
+        fields = "__all__"
+
+
+class CallPickupGroupSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.CallPickupGroup
+        fields = "__all__"
+
+
+class CallPickupGroupMemberSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.CallPickupGroupMember
+        fields = "__all__"

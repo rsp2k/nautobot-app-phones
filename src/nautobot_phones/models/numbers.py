@@ -63,10 +63,12 @@ class DirectoryNumber(PrimaryModel):
         blank=True,
         help_text="Name shown on the called party's display (e.g. 'Alice — Sales').",
     )
-    voicemail_profile = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Vendor-specific voicemail profile name (free-form).",
+    voicemail_profile = models.ForeignKey(
+        to="nautobot_phones.VoicemailProfile",
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="directory_numbers",
+        help_text="Voicemail profile applied to this DN. Vendor-agnostic; "
+                  "maps to CCM VoiceMailProfile / FreePBX vmail box config.",
     )
     vendor_extras = models.JSONField(
         default=dict,
