@@ -1,83 +1,15 @@
 # Model Reference
 
-Quick reference for the model graph. Each row links to the relevant
-section of the [Sync Reference](sync_reference.md) for field details.
+The full per-model reference now lives under
+[**Data Models**](../models/index.md). Quick links to the most commonly
+referenced records:
 
-## Identity table
+- [PhoneSystem](../models/phonesystem.md) — cluster root
+- [Phone](../models/phone.md) — endpoint inventory (IP phones, Jabber, ATAs, CTI)
+- [DirectoryNumber](../models/directorynumber.md) — extension within a partition
+- [Trunk](../models/trunk.md) — egress paths
+- [RoutePattern](../models/routepattern.md) — outbound dial-plan match
 
-| Model | Base class | Natural key | Notes |
-|-------|-----------|-------------|-------|
-| `PhoneSystem` | `PrimaryModel` | `name` | Cluster root |
-| `Carrier` | `OrganizationalModel` | `name` | Telecom provider |
-| `Partition` | `OrganizationalModel` | (`phone_system`, `name`) | Routing namespace |
-| `CallingSearchSpace` | `OrganizationalModel` | (`phone_system`, `name`) | Ordered list of partitions |
-| `CSSPartitionMembership` | `BaseModel` | (`css`, `partition`) + `priority` | Through-table |
-| `DirectoryNumber` | `PrimaryModel` | (`partition`, `extension`) | DN |
-| `DIDBlock` | `PrimaryModel` | (`start_e164`, `end_e164`, `carrier`) | E.164 ranges |
-| `DID` | `PrimaryModel` | `e164` | Materialized only on assignment |
-| `DIDAssignment` | `BaseModel` | OneToOne `did` + GFK target | Generic FK to DN/Trunk |
-| `Phone` | `PrimaryModel` | (`phone_system`, `device_name`) | Any phone-class endpoint |
-| `Line` | `BaseModel` | (`phone`, `button_index`) | DN appearance |
-| `SpeedDial` | `BaseModel` | (`phone`, `button_index`) | Speed-dial button |
-| `BusyLampField` | `BaseModel` | (`phone`, `button_index`) | Presence-aware speed-dial |
-| `PhoneServiceUrl` | `BaseModel` | (`phone`, `button_index`) | XML service button |
-| `Trunk` | `PrimaryModel` | (`phone_system`, `name`) | SIP/PRI/H323/MGCP |
-| `RoutePattern` | `PrimaryModel` | (`partition`, `pattern`) | XOR target_trunk/target_route_list/target_dn |
-| `RouteList` | `PrimaryModel` | (`phone_system`, `name`) | Priority list of route groups |
-| `RouteGroup` | `PrimaryModel` | (`phone_system`, `name`) | Load-balanced trunk group |
-| `RouteListMember` | `BaseModel` | (`route_list`, `route_group`) | Through-table with priority |
-| `RouteGroupMember` | `BaseModel` | (`route_group`, target GFK) | Through-table |
-| `TranslationPattern` | `PrimaryModel` | (`partition`, `pattern`) | Pre-routing digit rewrite |
-| `AnalogGateway` | `PrimaryModel` | (`phone_system`, `name`) | VG450/VG350/etc. |
-| `AnalogPort` | `BaseModel` | (`gateway`, `port_index`) | FXS/FXO port |
-| `HuntPilot` | `PrimaryModel` | (`partition`, `pattern`) | Pattern dialed to enter a HuntList |
-| `HuntList` | `PrimaryModel` | (`phone_system`, `name`) | Ordered set of LineGroups |
-| `LineGroup` | `PrimaryModel` | (`phone_system`, `name`) | Ordered set of DNs + hunt algorithm |
-| `HuntListMember` | `BaseModel` | (`hunt_list`, `line_group`) | Through-table with selection_order |
-| `LineGroupMember` | `BaseModel` | (`line_group`, `directory_number`) | Through-table with line_selection_order |
-| `DeviceProfile` | `PrimaryModel` | (`phone_system`, `name`) | Vendor-agnostic device-config bundle (CCM DevicePool / FreePBX template) |
-| `VoicemailProfile` | `PrimaryModel` | (`phone_system`, `name`) | Voicemail box config |
-| `CallPickupGroup` | `PrimaryModel` | (`phone_system`, `name`) | Pattern that picks up ringing peers |
-| `CallPickupGroupMember` | `BaseModel` | (`pickup_group`, `directory_number`) | Through-table with priority |
-
-## Vendor-specific data: `vendor_extras` JSONField
-
-Every `PrimaryModel` carries a `vendor_extras: JSONField`. This holds
-CCM-specific fields not modeled as columns. Examples:
-
-| Model | Common contents |
-|-------|----------------|
-| `Phone` | `axl_model`; CCM-specific provisioning detail when getPhone enrichment is on (`builtInBridgeStatus`, `callInfoPrivacyStatus`, `deviceMobilityMode`, `alwaysUsePrimeLine*`, `aarNeighborhoodName`, `dndOption`, `securityProfileName`, `sipProfileName`, `rerouteCallingSearchSpaceName`, `subscribeCallingSearchSpaceName`, `mtpRequired`, `packetCaptureMode`, `commonPhoneConfigName`, `commonDeviceConfigName`, `phoneTemplateName`, `softkeyTemplateName`, `mobilityUserIdName`, `networkLocation`, `networkLocale`) |
-| `Line` | When getPhone enrichment is on: `mwlPolicy`, `audibleMwi`, `recordingFlag`, `partitionUsage`, `consecutiveRingSetting`, `ringSettingIdlePickupAlert`, `ringSettingActivePickupAlert` |
-| `HuntList` | `callManagerGroupName` (CCM-only) |
-| `AnalogGateway` | `module_units` (list of `{unit_index, subunit_index, subunit_product}` dicts) |
-| `RoutePattern` | (currently empty by default) |
-| `TranslationPattern` | Long-tail Cisco fields (presentation bits, numbering plans, number types) |
-| `DeviceProfile` | CCM-specific bundled refs: `callManagerGroupName`, `regionName`, `locationName`, `dateTimeSettingName`, `srstName`, `mediaResourceListName`, `networkLocale`, etc. (FreePBX populates differently or leaves empty) |
-| `VoicemailProfile` | `voiceMailboxMask` (CCM-specific) |
-
-CCM-specific fields are stored under their original AXL camelCase names
-in `vendor_extras` — preserves traceability with the CCM admin UI and
-keeps the Phone/Line schemas vendor-agnostic. A FreePBX adapter would
-populate different keys (e.g. PJSIP-specific config) without schema
-churn on Nautobot's side.
-
-Filterable via Nautobot's standard JSON filtering:
-
-```
-/plugins/phones/phones/?vendor_extras__axl_model=Cisco%207841
-```
-
-## Phone @property accessors
-
-`Phone` exposes two computed properties that read through the linked
-`dcim.Device`:
-
-- **`Phone.model`** — reads `self.device.device_type.model` (falls back
-  to `vendor_extras['axl_model']` when no Device is linked yet)
-- **`Phone.location`** — reads `self.device.location` (falls back to
-  None)
-
-This makes Nautobot's DCIM the single source of truth for hardware
-identity and physical placement, while the Phone record stays focused
-on CCM-side concerns.
+See the [Data Models index](../models/index.md) for the full list of
+30+ models grouped by domain (system, dial plan, numbers, endpoints,
+routing, hunt subsystem, analog, feature config).

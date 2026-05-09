@@ -110,11 +110,54 @@ nav:
   - "Overview": "index.md"
   - "User Guide":
     - "App Overview": "user/app_overview.md"
+    - "Getting Started": "user/app_getting_started.md"
     - "Use Cases": "user/use_cases.md"
     - "Sync Reference": "user/sync_reference.md"
     - "Models": "user/models.md"
     - "External Interactions": "user/external_interactions.md"
     - "FAQ": "user/faq.md"
+  - "Data Models":
+    - "Index": "models/index.md"
+    - "System":
+      - "PhoneSystem": "models/phonesystem.md"
+      - "Carrier": "models/carrier.md"
+    - "Dial plan":
+      - "Partition": "models/partition.md"
+      - "CallingSearchSpace": "models/callingsearchspace.md"
+      - "CSSPartitionMembership": "models/csspartitionmembership.md"
+    - "Numbers":
+      - "DirectoryNumber": "models/directorynumber.md"
+      - "DIDBlock": "models/didblock.md"
+      - "DID": "models/did.md"
+      - "DIDAssignment": "models/didassignment.md"
+    - "Endpoints":
+      - "Phone": "models/phone.md"
+      - "Line": "models/line.md"
+      - "SpeedDial": "models/speeddial.md"
+      - "BusyLampField": "models/busylampfield.md"
+      - "PhoneServiceUrl": "models/phoneserviceurl.md"
+    - "Routing":
+      - "Trunk": "models/trunk.md"
+      - "RouteList": "models/routelist.md"
+      - "RouteGroup": "models/routegroup.md"
+      - "RouteListMember": "models/routelistmember.md"
+      - "RouteGroupMember": "models/routegroupmember.md"
+      - "RoutePattern": "models/routepattern.md"
+      - "TranslationPattern": "models/translationpattern.md"
+    - "Hunt subsystem":
+      - "HuntPilot": "models/huntpilot.md"
+      - "HuntList": "models/huntlist.md"
+      - "LineGroup": "models/linegroup.md"
+      - "HuntListMember": "models/huntlistmember.md"
+      - "LineGroupMember": "models/linegroupmember.md"
+    - "Analog":
+      - "AnalogGateway": "models/analoggateway.md"
+      - "AnalogPort": "models/analogport.md"
+    - "Feature config":
+      - "DeviceProfile": "models/deviceprofile.md"
+      - "VoicemailProfile": "models/voicemailprofile.md"
+      - "CallPickupGroup": "models/callpickupgroup.md"
+      - "CallPickupGroupMember": "models/callpickupgroupmember.md"
   - "Administrator Guide":
     - "Install": "admin/install.md"
     - "Compatibility Matrix": "admin/compatibility_matrix.md"
