@@ -137,3 +137,33 @@ class AnalogPortSerializer(NautobotModelSerializer):
     class Meta:
         model = models.AnalogPort
         fields = "__all__"
+
+
+class HuntPilotSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.HuntPilot
+        fields = "__all__"
+
+
+class HuntListSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.HuntList
+        fields = "__all__"
+
+
+class HuntListMemberSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.HuntListMember
+        fields = "__all__"
+
+
+class LineGroupSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.LineGroup
+        fields = "__all__"
+
+
+class LineGroupMemberSerializer(NautobotModelSerializer):
+    class Meta:
+        model = models.LineGroupMember
+        fields = "__all__"

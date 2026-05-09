@@ -58,6 +58,26 @@
 | `missed_call_logging` | bool | |
 | `partition_usage` | "General" / etc. | |
 
+### Hunt subsystem
+
+Three first-class records and two through-tables, in the order CCM
+evaluates them at call time:
+
+| Model | Source AXL ops | Notes |
+|-------|---------------|-------|
+| `LineGroup` | `listLineGroup` + `getLineGroup` | listX returns scalars only; getX returns the ordered DN membership |
+| `LineGroupMember` | (member rows from `getLineGroup`) | `line_selection_order` controls hunt order within the group |
+| `HuntList` | `listHuntList` + `getHuntList` | listX returns scalars; getX returns the ordered LineGroup membership |
+| `HuntListMember` | (member rows from `getHuntList`) | `selection_order` is the priority across LineGroups in the same HuntList |
+| `HuntPilot` | `listHuntPilot` | Single-pass; AXL exposes `huntListName`, `forwardHuntNoAnswer`, `forwardHuntBusy` directly |
+
+`distribution_algorithm` on `LineGroup` is one of `Top Down`, `Circular`,
+`Broadcast`, `Longest Idle Time` — CCM's stored values, used as-is. The
+three `hunt_algorithm_*` fields on LineGroup are full natural-language
+phrases as CCM stores them (e.g. `Try next member; then, try next group
+in Hunt List`); these can be 50 chars long, so the columns are sized at
+100.
+
 ## Sync ordering (top-level)
 
 DiffSync's `top_level` tuple defines load order, which matters for
@@ -70,6 +90,12 @@ identifier resolution (children reference parents by natural key):
 5. Phone children: `line`, `speed_dial`, `busy_lamp_field`, `phone_service_url`
 6. Routing: `trunk`, `route_list`, `route_group`, `route_pattern`, `translation_pattern`
 7. Analog: `analog_gateway`, `analog_port`
+8. Hunt: `line_group`, `hunt_list`, `line_group_member`, `hunt_list_member`, `hunt_pilot`
+
+Within the hunt subsystem, groups must load before their member rows
+(member identifiers reference the group by name), and HuntList must
+load before HuntPilot because the pilot's natural foreign key is the
+hunt-list name.
 
 When `enrich_phone_lines=False`, the four "phone child" models are excluded
 from the diff so existing records aren't orphan-deleted by a sync that

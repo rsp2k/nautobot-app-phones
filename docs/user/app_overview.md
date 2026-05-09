@@ -35,6 +35,12 @@ The app pulls data from a CCM cluster's **AXL SOAP API** (configuration) and
 - `RouteGroup` — load-balanced trunk group
 - `TranslationPattern` — digit-rewrite pattern (pre-routing)
 
+### Hunt
+- `HuntPilot` — pattern that fronts a hunt list (e.g. `1204` → "ring the HIM team")
+- `HuntList` — ordered set of LineGroups, evaluated when a HuntPilot matches
+- `LineGroup` — ordered set of DNs with a distribution algorithm (Top Down,
+  Circular, Broadcast, Longest Idle Time)
+
 ### Analog
 - `AnalogGateway` — Cisco voice gateway (VG450, VG350, etc.)
 - `AnalogPort` — FXS/FXO port on a gateway, optionally bound to a DN

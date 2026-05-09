@@ -402,3 +402,242 @@ class TranslationPattern(PrimaryModel):
     def __str__(self) -> str:
         """Display string."""
         return f"{self.partition.name}/{self.pattern}"
+
+
+# --------------------------------------------------------------------------
+# Hunt subsystem — multi-phone ring-group call routing
+# --------------------------------------------------------------------------
+#
+# CCM call flow when someone dials a hunt pattern:
+#
+#   Dialed digits → HuntPilot (matches like a RoutePattern)
+#                 → HuntList (ordered priority list of LineGroups)
+#                 → LineGroup (distribution algorithm over a list of DNs)
+#                 → DN(s) ring per the algorithm (top-down, circular,
+#                   broadcast, or longest-idle)
+#
+# When all DNs in all LineGroups are exhausted without an answer, the
+# HuntPilot's forward_hunt_no_answer destination kicks in. Same for busy.
+#
+# Same through-table pattern as RouteList → RouteGroup → trunks; the
+# hunt subsystem just terminates at DNs (real people's phones) rather
+# than trunks (call-routing destinations).
+
+
+class HuntList(PrimaryModel):
+    """A priority-ordered list of LineGroups.
+
+    Wraps the 'when this hunt fires, here's the ordered list of
+    LineGroups to try' configuration. Each LineGroup gets a chance to
+    answer (per its own distribution algorithm); if nothing in the
+    LineGroup answers, the next LineGroup in the HuntList is tried.
+
+    HuntList → LineGroup is the M2M through HuntListMember (selection_order).
+    """
+
+    name = models.CharField(max_length=100)
+    phone_system = models.ForeignKey(
+        to="nautobot_phones.PhoneSystem",
+        on_delete=models.CASCADE,
+        related_name="hunt_lists",
+    )
+    description = models.CharField(max_length=200, blank=True)
+    call_manager_group = models.CharField(
+        max_length=100, blank=True,
+        help_text="CCM Call Manager Group this hunt list registers against.",
+    )
+    route_list_enabled = models.BooleanField(default=True)
+    voice_mail_usage = models.BooleanField(default=False)
+    vendor_extras = models.JSONField(default=dict, blank=True)
+    line_groups = models.ManyToManyField(
+        to="nautobot_phones.LineGroup",
+        through="nautobot_phones.HuntListMember",
+        related_name="hunt_lists",
+        blank=True,
+    )
+
+    natural_key_field_names = ["phone_system", "name"]
+
+    class Meta:
+        """Meta options for HuntList."""
+
+        ordering = ("phone_system", "name")
+        unique_together = (("phone_system", "name"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.phone_system.name}/{self.name}"
+
+
+class LineGroup(PrimaryModel):
+    """A group of DNs with a distribution algorithm.
+
+    LineGroups are the leaf objects of the hunt subsystem — they hold
+    the actual list of phones (via DN refs) that ring when the hunt
+    fires. The distribution_algorithm determines whether all ring at
+    once (broadcast), one at a time in order (top-down), or in rotation
+    (circular / longest-idle).
+
+    LineGroup → DirectoryNumber is the M2M through LineGroupMember
+    (line_selection_order).
+    """
+
+    name = models.CharField(max_length=100)
+    phone_system = models.ForeignKey(
+        to="nautobot_phones.PhoneSystem",
+        on_delete=models.CASCADE,
+        related_name="line_groups",
+    )
+    distribution_algorithm = models.CharField(
+        max_length=32, blank=True,
+        help_text='"Top Down", "Circular", "Broadcast", or "Longest Idle Time".',
+    )
+    rna_reversion_timeout = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        verbose_name="RNA Reversion Timeout (sec)",
+        help_text="Seconds before Ring-No-Answer triggers algorithm advance.",
+    )
+    hunt_algorithm_no_answer = models.CharField(
+        max_length=100, blank=True,
+        help_text='What to do when this group runs out of phones to ring without answer.',
+    )
+    hunt_algorithm_busy = models.CharField(
+        max_length=100, blank=True,
+        help_text='What to do when all phones in this group are busy.',
+    )
+    hunt_algorithm_not_available = models.CharField(
+        max_length=100, blank=True,
+        help_text='What to do when no phones in this group are reachable.',
+    )
+    auto_log_off_hunt = models.BooleanField(default=False)
+    vendor_extras = models.JSONField(default=dict, blank=True)
+    directory_numbers = models.ManyToManyField(
+        to="nautobot_phones.DirectoryNumber",
+        through="nautobot_phones.LineGroupMember",
+        related_name="line_groups",
+        blank=True,
+    )
+
+    natural_key_field_names = ["phone_system", "name"]
+
+    class Meta:
+        """Meta options for LineGroup."""
+
+        ordering = ("phone_system", "name")
+        unique_together = (("phone_system", "name"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.phone_system.name}/{self.name}"
+
+
+class HuntListMember(BaseModel):
+    """Through-table for HuntList → LineGroup with selection order."""
+
+    hunt_list = models.ForeignKey(
+        to="nautobot_phones.HuntList",
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    line_group = models.ForeignKey(
+        to="nautobot_phones.LineGroup",
+        on_delete=models.PROTECT,
+        related_name="hunt_list_memberships",
+    )
+    selection_order = models.PositiveSmallIntegerField(
+        help_text="1-based priority — lower order tries first.",
+    )
+
+    class Meta:
+        """Meta options for HuntListMember."""
+
+        ordering = ("hunt_list", "selection_order")
+        unique_together = (("hunt_list", "line_group"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.hunt_list.name}[{self.selection_order}] -> {self.line_group.name}"
+
+
+class LineGroupMember(BaseModel):
+    """Through-table for LineGroup → DirectoryNumber with line selection order."""
+
+    line_group = models.ForeignKey(
+        to="nautobot_phones.LineGroup",
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    directory_number = models.ForeignKey(
+        to="nautobot_phones.DirectoryNumber",
+        on_delete=models.PROTECT,
+        related_name="line_group_memberships",
+    )
+    line_selection_order = models.PositiveSmallIntegerField(
+        help_text="0-based priority within the group.",
+    )
+
+    class Meta:
+        """Meta options for LineGroupMember."""
+
+        ordering = ("line_group", "line_selection_order")
+        unique_together = (("line_group", "directory_number"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.line_group.name}[{self.line_selection_order}] -> {self.directory_number.extension}"
+
+
+class HuntPilot(PrimaryModel):
+    """A dial pattern that triggers hunt-list distribution.
+
+    Like RoutePattern but the destination is always a HuntList (not a
+    trunk or single DN). Hunt-specific overflow fields capture what
+    happens when the hunt fails: `forward_hunt_no_answer_destination`
+    and `forward_hunt_busy_destination` are call-forward targets when
+    the hunt list is exhausted.
+    """
+
+    pattern = models.CharField(max_length=100)
+    partition = models.ForeignKey(
+        to="nautobot_phones.Partition",
+        on_delete=models.PROTECT,
+        related_name="hunt_pilots",
+    )
+    description = models.CharField(max_length=200, blank=True)
+    hunt_list = models.ForeignKey(
+        to="nautobot_phones.HuntList",
+        on_delete=models.PROTECT,
+        related_name="hunt_pilots",
+        null=True, blank=True,
+        help_text="The HuntList that receives matching calls.",
+    )
+    alerting_name = models.CharField(
+        max_length=64, blank=True,
+        help_text="Display name shown on ringing phones.",
+    )
+    max_hunt_duration = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        verbose_name="Max Hunt Duration (sec)",
+        help_text="Total time the hunt may run before forwarding to no-answer destination.",
+    )
+    forward_hunt_no_answer_destination = models.CharField(
+        max_length=64, blank=True,
+        help_text="Where to send the call when the hunt list is exhausted without answer.",
+    )
+    forward_hunt_busy_destination = models.CharField(
+        max_length=64, blank=True,
+        help_text="Where to send the call when all phones in the hunt are busy.",
+    )
+    vendor_extras = models.JSONField(default=dict, blank=True)
+
+    natural_key_field_names = ["partition", "pattern"]
+
+    class Meta:
+        """Meta options for HuntPilot."""
+
+        ordering = ("partition", "pattern")
+        unique_together = (("partition", "pattern"),)
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.partition.name}/{self.pattern}"

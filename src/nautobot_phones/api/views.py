@@ -134,3 +134,33 @@ class AnalogPortAPIViewSet(NautobotModelViewSet):
     queryset = models.AnalogPort.objects.all()
     serializer_class = serializers.AnalogPortSerializer
     filterset_class = None
+
+
+class HuntPilotAPIViewSet(NautobotModelViewSet):
+    queryset = models.HuntPilot.objects.all()
+    serializer_class = serializers.HuntPilotSerializer
+    filterset_class = filters.HuntPilotFilterSet
+
+
+class HuntListAPIViewSet(NautobotModelViewSet):
+    queryset = models.HuntList.objects.all()
+    serializer_class = serializers.HuntListSerializer
+    filterset_class = filters.HuntListFilterSet
+
+
+class HuntListMemberAPIViewSet(NautobotModelViewSet):
+    queryset = models.HuntListMember.objects.all()
+    serializer_class = serializers.HuntListMemberSerializer
+    filterset_class = None
+
+
+class LineGroupAPIViewSet(NautobotModelViewSet):
+    queryset = models.LineGroup.objects.all()
+    serializer_class = serializers.LineGroupSerializer
+    filterset_class = filters.LineGroupFilterSet
+
+
+class LineGroupMemberAPIViewSet(NautobotModelViewSet):
+    queryset = models.LineGroupMember.objects.all()
+    serializer_class = serializers.LineGroupMemberSerializer
+    filterset_class = None

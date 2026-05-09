@@ -30,6 +30,11 @@ from nautobot_phones.diffsync.models import (
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DirectoryNumberModel,
+    HuntListMemberModel,
+    HuntListModel,
+    HuntPilotModel,
+    LineGroupMemberModel,
+    LineGroupModel,
     LineModel,
     PartitionModel,
     PhoneModel,
@@ -99,6 +104,11 @@ class CUCMSourceAdapter(Adapter):
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
     analog_port = AnalogPortModel
+    hunt_list = HuntListModel
+    line_group = LineGroupModel
+    hunt_list_member = HuntListMemberModel
+    line_group_member = LineGroupMemberModel
+    hunt_pilot = HuntPilotModel
 
     top_level = (
         "phone_system",
@@ -118,6 +128,11 @@ class CUCMSourceAdapter(Adapter):
         "translation_pattern",
         "analog_gateway",
         "analog_port",
+        "line_group",
+        "hunt_list",
+        "line_group_member",
+        "hunt_list_member",
+        "hunt_pilot",
     )
 
     type = "cisco-ucm"
@@ -216,6 +231,7 @@ class CUCMSourceAdapter(Adapter):
         self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
         self._load_translation_patterns(ps.name)
         self._load_gateways_and_ports(ps.name)
+        self._load_hunt_subsystem(ps.name)
 
     # -- Per-collection loaders ----------------------------------------------
 
@@ -858,6 +874,165 @@ class CUCMSourceAdapter(Adapter):
             return self.client._service.getGateway(domainName=name)
         except Exception:  # noqa: BLE001
             return None
+
+    def _load_hunt_subsystem(self, ps_name: str) -> None:
+        """Sync the multi-phone hunt subsystem: LineGroups, HuntLists, HuntPilots.
+
+        Three-phase load (must be in this order — children reference parents
+        by natural key):
+
+          1. LineGroup (terminal nodes — list of DNs with distribution algo)
+             + LineGroupMember through-table — populated via getLineGroup
+             since list operation only returns scalar fields.
+
+          2. HuntList (priority list of LineGroups) + HuntListMember
+             through-table — populated via getHuntList.
+
+          3. HuntPilot (dial pattern → HuntList) — listHuntPilot scalars
+             cover everything we need; no per-record enrichment.
+        """
+        # Phase 1: LineGroups + their DN members
+        FK_TAG = {"_value_1": "", "uuid": ""}
+        lgs = self.client._list("listLineGroup", "lineGroup",
+            search_criteria={"name": "%"},
+            returned_tags={
+                "name": "", "distributionAlgorithm": "", "rnaReversionTimeOut": "",
+                "huntAlgorithmNoAnswer": "", "huntAlgorithmBusy": "",
+                "huntAlgorithmNotAvailable": "", "autoLogOffHunt": "",
+            },
+        )
+        for lg in lgs:
+            name = _get(lg, "name", "")
+            if not name:
+                continue
+            rna = _get(lg, "rnaReversionTimeOut")
+            try:
+                rna_int = int(rna) if rna not in (None, "") else None
+            except (ValueError, TypeError):
+                rna_int = None
+            self.add(self.line_group(
+                name=name,
+                phone_system__name=ps_name,
+                distribution_algorithm=(_get(lg, "distributionAlgorithm", "") or ""),
+                rna_reversion_timeout=rna_int,
+                hunt_algorithm_no_answer=(_get(lg, "huntAlgorithmNoAnswer", "") or ""),
+                hunt_algorithm_busy=(_get(lg, "huntAlgorithmBusy", "") or ""),
+                hunt_algorithm_not_available=(_get(lg, "huntAlgorithmNotAvailable", "") or ""),
+                auto_log_off_hunt=_axl_bool(_get(lg, "autoLogOffHunt")),
+            ))
+            # Per-LineGroup enrichment to get DN members
+            try:
+                full = self.client._service.getLineGroup(name=name)
+            except Exception:  # noqa: BLE001
+                continue
+            obj = _get(_get(full, "return"), "lineGroup")
+            members = _get(_get(obj, "members"), "member", []) or []
+            if not isinstance(members, list):
+                members = [members]
+            for m in members:
+                dirn = _get(m, "directoryNumber") or {}
+                dn_pattern = _get(dirn, "pattern", "")
+                if not dn_pattern:
+                    continue
+                rp = _get(dirn, "routePartitionName")
+                dn_partition = self._resolve_partition(rp) if rp else self.NULL_PARTITION_NAME
+                order = _get(m, "lineSelectionOrder")
+                try:
+                    order_int = int(order) if order not in (None, "") else 0
+                except (ValueError, TypeError):
+                    order_int = 0
+                self.add(self.line_group_member(
+                    line_group__name=name,
+                    line_group__phone_system__name=ps_name,
+                    directory_number__extension=dn_pattern,
+                    directory_number__partition__name=dn_partition,
+                    line_selection_order=order_int,
+                ))
+
+        # Phase 2: HuntLists + their LineGroup members
+        hls = self.client._list("listHuntList", "huntList",
+            search_criteria={"name": "%"},
+            returned_tags={
+                "name": "", "description": "",
+                "callManagerGroupName": FK_TAG,
+                "routeListEnabled": "", "voiceMailUsage": "",
+            },
+        )
+        for hl in hls:
+            name = _get(hl, "name", "")
+            if not name:
+                continue
+            cmg_ref = _get(hl, "callManagerGroupName")
+            cmg_name = _get(cmg_ref, "_value_1", "") if cmg_ref else ""
+            self.add(self.hunt_list(
+                name=name,
+                phone_system__name=ps_name,
+                description=(_get(hl, "description", "") or ""),
+                call_manager_group=cmg_name,
+                route_list_enabled=_axl_bool(_get(hl, "routeListEnabled")),
+                voice_mail_usage=_axl_bool(_get(hl, "voiceMailUsage")),
+            ))
+            try:
+                full = self.client._service.getHuntList(name=name)
+            except Exception:  # noqa: BLE001
+                continue
+            obj = _get(_get(full, "return"), "huntList")
+            members = _get(_get(obj, "members"), "member", []) or []
+            if not isinstance(members, list):
+                members = [members]
+            for m in members:
+                lg_ref = _get(m, "lineGroupName") or {}
+                lg_name = _get(lg_ref, "_value_1", "")
+                if not lg_name:
+                    continue
+                order = _get(m, "selectionOrder")
+                try:
+                    order_int = int(order) if order not in (None, "") else 1
+                except (ValueError, TypeError):
+                    order_int = 1
+                self.add(self.hunt_list_member(
+                    hunt_list__name=name,
+                    hunt_list__phone_system__name=ps_name,
+                    line_group__name=lg_name,
+                    selection_order=order_int,
+                ))
+
+        # Phase 3: HuntPilots — dial patterns that target a HuntList
+        hps = self.client._list("listHuntPilot", "huntPilot",
+            search_criteria={"pattern": "%"},
+            returned_tags={
+                "pattern": "", "description": "",
+                "routePartitionName": FK_TAG,
+                "huntListName": FK_TAG,
+                "alertingName": "", "maxHuntduration": "",
+            },
+        )
+        for hp in hps:
+            pattern = _get(hp, "pattern", "")
+            if not pattern:
+                continue
+            partition_name = self._resolve_partition(_get(hp, "routePartitionName"))
+            hl_ref = _get(hp, "huntListName")
+            hl_name = _get(hl_ref, "_value_1") if hl_ref else None
+            duration = _get(hp, "maxHuntduration")
+            try:
+                duration_int = int(duration) if duration not in (None, "") else None
+            except (ValueError, TypeError):
+                duration_int = None
+            self.add(self.hunt_pilot(
+                pattern=pattern,
+                partition__name=partition_name,
+                partition__phone_system__name=ps_name,
+                description=(_get(hp, "description", "") or ""),
+                hunt_list__name=hl_name,
+                alerting_name=(_get(hp, "alertingName", "") or ""),
+                max_hunt_duration=duration_int,
+                # Long-tail forward-hunt destinations live in nested objects
+                # that need getHuntPilot enrichment to extract — defer to
+                # a follow-up pass if operationally needed.
+                forward_hunt_no_answer_destination="",
+                forward_hunt_busy_destination="",
+            ))
 
 
 def _extract_extras(obj: Any, exclude: set[str]) -> dict:

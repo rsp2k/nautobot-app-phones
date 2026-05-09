@@ -607,3 +607,122 @@ class AnalogGatewayUIViewSet(NautobotUIViewSet):
             ),
         ),
     )
+
+
+class HuntPilotUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for HuntPilot — pattern that fronts a HuntList."""
+
+    queryset = models.HuntPilot.objects.all()
+    table_class = tables.HuntPilotTable
+    filterset_class = filters.HuntPilotFilterSet
+    filterset_form_class = forms.HuntPilotFilterForm
+    form_class = forms.HuntPilotForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                label="Pattern Definition",
+                fields=["pattern", "partition", "alerting_name", "description"],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=200,
+                label="Hunt Forwarding",
+                fields=[
+                    "hunt_list", "max_hunt_duration",
+                    "forward_hunt_no_answer_destination",
+                    "forward_hunt_busy_destination",
+                ],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                fields=["vendor_extras"],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
+            ),
+        ),
+    )
+
+
+class HuntListUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for HuntList — ordered list of LineGroups."""
+
+    queryset = models.HuntList.objects.all()
+    table_class = tables.HuntListTable
+    filterset_class = filters.HuntListFilterSet
+    filterset_form_class = forms.HuntListFilterForm
+    form_class = forms.HuntListForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                fields=[
+                    "name", "phone_system", "description",
+                    "call_manager_group", "route_list_enabled", "voice_mail_usage",
+                    "vendor_extras",
+                ],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.HuntListMemberTable, table_filter="hunt_list",
+                table_title="Member Line Groups (selection order)",
+                exclude_columns=["hunt_list"],
+                order_by_fields=["selection_order"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.HuntPilotTable, table_filter="hunt_list",
+                table_title="Hunt Pilots Targeting This List",
+                exclude_columns=["hunt_list"],
+            ),
+        ),
+    )
+
+
+class LineGroupUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for LineGroup — ordered set of DNs with a hunt algorithm."""
+
+    queryset = models.LineGroup.objects.all()
+    table_class = tables.LineGroupTable
+    filterset_class = filters.LineGroupFilterSet
+    filterset_form_class = forms.LineGroupFilterForm
+    form_class = forms.LineGroupForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                label="Group Definition",
+                fields=["name", "phone_system", "distribution_algorithm", "rna_reversion_timeout", "auto_log_off_hunt"],
+            ),
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=200,
+                label="Hunt Algorithms",
+                fields=[
+                    "hunt_algorithm_no_answer",
+                    "hunt_algorithm_busy",
+                    "hunt_algorithm_not_available",
+                ],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=100,
+                table_class=tables.LineGroupMemberTable, table_filter="line_group",
+                table_title="Member Directory Numbers (line order)",
+                exclude_columns=["line_group"],
+                order_by_fields=["line_selection_order"],
+            ),
+            ObjectsTablePanel(
+                section=SectionChoices.RIGHT_HALF, weight=200,
+                table_class=tables.HuntListMemberTable, table_filter="line_group",
+                table_title="Hunt Lists Containing This Group",
+                exclude_columns=["line_group"],
+            ),
+        ),
+    )

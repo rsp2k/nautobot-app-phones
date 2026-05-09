@@ -424,3 +424,98 @@ class DIDAssignmentTable(BaseTable):
         model = models.DIDAssignment
         fields = ("did", "target_type", "assigned_at")
         default_columns = ("did", "target_type", "assigned_at")
+
+
+# --------------------------------------------------------------------------
+# Hunt subsystem — HuntPilot, HuntList, LineGroup are first-class records;
+# HuntListMember + LineGroupMember are nested-only on parent details.
+# --------------------------------------------------------------------------
+
+
+class HuntPilotTable(BaseTable):
+    """List-view table for HuntPilot — pattern that fronts a hunt list."""
+
+    pk = ToggleColumn()
+    pattern = tables.LinkColumn()
+    partition = tables.LinkColumn()
+    hunt_list = tables.LinkColumn()
+    actions = ButtonsColumn(models.HuntPilot)
+
+    class Meta(BaseTable.Meta):
+        model = models.HuntPilot
+        fields = (
+            "pk", "pattern", "partition", "hunt_list", "alerting_name",
+            "description", "max_hunt_duration", "actions",
+        )
+        default_columns = (
+            "pk", "pattern", "partition", "hunt_list", "alerting_name",
+            "description", "actions",
+        )
+
+
+class HuntListTable(BaseTable):
+    """List-view table for HuntList — ordered set of LineGroups."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.HuntList)
+
+    class Meta(BaseTable.Meta):
+        model = models.HuntList
+        fields = (
+            "pk", "name", "phone_system", "description", "call_manager_group",
+            "route_list_enabled", "voice_mail_usage", "actions",
+        )
+        default_columns = (
+            "pk", "name", "phone_system", "description", "call_manager_group",
+            "actions",
+        )
+
+
+class LineGroupTable(BaseTable):
+    """List-view table for LineGroup — ordered set of DNs with a hunt algo."""
+
+    pk = ToggleColumn()
+    name = tables.LinkColumn()
+    phone_system = tables.LinkColumn()
+    actions = ButtonsColumn(models.LineGroup)
+
+    class Meta(BaseTable.Meta):
+        model = models.LineGroup
+        fields = (
+            "pk", "name", "phone_system", "distribution_algorithm",
+            "rna_reversion_timeout", "hunt_algorithm_no_answer",
+            "hunt_algorithm_busy", "hunt_algorithm_not_available",
+            "auto_log_off_hunt", "actions",
+        )
+        default_columns = (
+            "pk", "name", "phone_system", "distribution_algorithm",
+            "rna_reversion_timeout", "actions",
+        )
+
+
+class HuntListMemberTable(BaseTable):
+    """Members of a HuntList, embedded on HuntList detail (selection order)."""
+
+    selection_order = tables.Column()
+    line_group = tables.LinkColumn()
+    hunt_list = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.HuntListMember
+        fields = ("selection_order", "line_group", "hunt_list")
+        default_columns = ("selection_order", "line_group")
+
+
+class LineGroupMemberTable(BaseTable):
+    """Members of a LineGroup, embedded on LineGroup detail (line order)."""
+
+    line_selection_order = tables.Column(verbose_name="Order")
+    directory_number = tables.LinkColumn()
+    line_group = tables.LinkColumn()
+
+    class Meta(BaseTable.Meta):
+        model = models.LineGroupMember
+        fields = ("line_selection_order", "directory_number", "line_group")
+        default_columns = ("line_selection_order", "directory_number")

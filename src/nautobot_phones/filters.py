@@ -120,3 +120,27 @@ class AnalogGatewayFilterSet(NautobotFilterSet):
     class Meta:
         model = models.AnalogGateway
         fields = ["name", "phone_system", "location", "model", "protocol"]
+
+
+class HuntPilotFilterSet(NautobotFilterSet):
+    """Filter set for HuntPilot list view."""
+
+    class Meta:
+        model = models.HuntPilot
+        fields = ["pattern", "partition", "hunt_list", "alerting_name"]
+
+
+class HuntListFilterSet(NautobotFilterSet):
+    """Filter set for HuntList list view."""
+
+    class Meta:
+        model = models.HuntList
+        fields = ["name", "phone_system", "call_manager_group", "route_list_enabled", "voice_mail_usage"]
+
+
+class LineGroupFilterSet(NautobotFilterSet):
+    """Filter set for LineGroup list view."""
+
+    class Meta:
+        model = models.LineGroup
+        fields = ["name", "phone_system", "distribution_algorithm", "auto_log_off_hunt"]

@@ -329,3 +329,70 @@ class AnalogGatewayFilterForm(NautobotFilterForm):
     field_order = ("q", "name", "phone_system", "location", "model", "protocol")
     q = forms.CharField(required=False, label="Search")
     protocol = forms.MultipleChoiceField(choices=AnalogGatewayProtocolChoices, required=False)
+
+
+# --------------------------------------------------------------------------
+# Hunt subsystem — HuntPilot, HuntList, LineGroup
+# Member tables (HuntListMember, LineGroupMember) don't get standalone
+# forms; they're created through the parent's M2M widget or by sync.
+# --------------------------------------------------------------------------
+class HuntPilotForm(NautobotModelForm):
+    """Create/edit form for HuntPilot."""
+
+    class Meta:
+        model = models.HuntPilot
+        fields = (
+            "pattern", "partition", "hunt_list", "alerting_name",
+            "description", "max_hunt_duration",
+            "forward_hunt_no_answer_destination", "forward_hunt_busy_destination",
+            "vendor_extras", "tags",
+        )
+
+
+class HuntPilotFilterForm(NautobotFilterForm):
+    """Filter sidebar form for HuntPilot list view."""
+
+    model = models.HuntPilot
+    field_order = ("q", "pattern", "partition", "hunt_list")
+    q = forms.CharField(required=False, label="Search")
+
+
+class HuntListForm(NautobotModelForm):
+    """Create/edit form for HuntList."""
+
+    class Meta:
+        model = models.HuntList
+        fields = (
+            "name", "phone_system", "description", "call_manager_group",
+            "route_list_enabled", "voice_mail_usage", "vendor_extras", "tags",
+        )
+
+
+class HuntListFilterForm(NautobotFilterForm):
+    """Filter sidebar form for HuntList list view."""
+
+    model = models.HuntList
+    field_order = ("q", "name", "phone_system")
+    q = forms.CharField(required=False, label="Search")
+
+
+class LineGroupForm(NautobotModelForm):
+    """Create/edit form for LineGroup."""
+
+    class Meta:
+        model = models.LineGroup
+        fields = (
+            "name", "phone_system", "distribution_algorithm",
+            "rna_reversion_timeout",
+            "hunt_algorithm_no_answer", "hunt_algorithm_busy",
+            "hunt_algorithm_not_available", "auto_log_off_hunt",
+            "vendor_extras", "tags",
+        )
+
+
+class LineGroupFilterForm(NautobotFilterForm):
+    """Filter sidebar form for LineGroup list view."""
+
+    model = models.LineGroup
+    field_order = ("q", "name", "phone_system", "distribution_algorithm")
+    q = forms.CharField(required=False, label="Search")

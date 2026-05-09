@@ -129,6 +129,34 @@ class AnalogPortType(OptimizedNautobotObjectType):
         model = models.AnalogPort
 
 
+class HuntPilotType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.HuntPilot
+        filterset_class = filters.HuntPilotFilterSet
+
+
+class HuntListType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.HuntList
+        filterset_class = filters.HuntListFilterSet
+
+
+class HuntListMemberType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.HuntListMember
+
+
+class LineGroupType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.LineGroup
+        filterset_class = filters.LineGroupFilterSet
+
+
+class LineGroupMemberType(OptimizedNautobotObjectType):
+    class Meta:
+        model = models.LineGroupMember
+
+
 graphql_types = [
     PhoneSystemType,
     CarrierType,
@@ -151,4 +179,9 @@ graphql_types = [
     TranslationPatternType,
     AnalogGatewayType,
     AnalogPortType,
+    HuntPilotType,
+    HuntListType,
+    HuntListMemberType,
+    LineGroupType,
+    LineGroupMemberType,
 ]

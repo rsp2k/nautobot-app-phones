@@ -30,6 +30,11 @@ router.register("route-patterns", views.RoutePatternAPIViewSet)
 router.register("translation-patterns", views.TranslationPatternAPIViewSet)
 router.register("analog-gateways", views.AnalogGatewayAPIViewSet)
 router.register("analog-ports", views.AnalogPortAPIViewSet)
+router.register("hunt-pilots", views.HuntPilotAPIViewSet)
+router.register("hunt-lists", views.HuntListAPIViewSet)
+router.register("hunt-list-members", views.HuntListMemberAPIViewSet)
+router.register("line-groups", views.LineGroupAPIViewSet)
+router.register("line-group-members", views.LineGroupMemberAPIViewSet)
 
 app_name = "nautobot_phones-api"
 urlpatterns = router.urls

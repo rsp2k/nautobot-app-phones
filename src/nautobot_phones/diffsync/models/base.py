@@ -406,6 +406,105 @@ class TranslationPatternModel(NautobotModel):
     vendor_extras: dict = {}
 
 
+class HuntListModel(NautobotModel):
+    """DiffSync model for HuntList — priority list of LineGroups."""
+
+    _model = models.HuntList
+    _modelname = "hunt_list"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = ("description", "call_manager_group", "route_list_enabled", "voice_mail_usage", "vendor_extras")
+
+    name: str
+    phone_system__name: str
+    description: str = ""
+    call_manager_group: str = ""
+    route_list_enabled: bool = True
+    voice_mail_usage: bool = False
+    vendor_extras: dict = {}
+
+
+class LineGroupModel(NautobotModel):
+    """DiffSync model for LineGroup — distribution algorithm over a list of DNs."""
+
+    _model = models.LineGroup
+    _modelname = "line_group"
+    _identifiers = ("name", "phone_system__name")
+    _attributes = (
+        "distribution_algorithm", "rna_reversion_timeout",
+        "hunt_algorithm_no_answer", "hunt_algorithm_busy", "hunt_algorithm_not_available",
+        "auto_log_off_hunt", "vendor_extras",
+    )
+
+    name: str
+    phone_system__name: str
+    distribution_algorithm: str = ""
+    rna_reversion_timeout: Optional[int] = None
+    hunt_algorithm_no_answer: str = ""
+    hunt_algorithm_busy: str = ""
+    hunt_algorithm_not_available: str = ""
+    auto_log_off_hunt: bool = False
+    vendor_extras: dict = {}
+
+
+class HuntListMemberModel(NautobotModel):
+    """DiffSync model for HuntListMember — through-table linking HuntList → LineGroup."""
+
+    _model = models.HuntListMember
+    _modelname = "hunt_list_member"
+    _identifiers = (
+        "hunt_list__name", "hunt_list__phone_system__name",
+        "line_group__name",
+    )
+    _attributes = ("selection_order",)
+
+    hunt_list__name: str
+    hunt_list__phone_system__name: str
+    line_group__name: str
+    selection_order: int = 1
+
+
+class LineGroupMemberModel(NautobotModel):
+    """DiffSync model for LineGroupMember — through-table linking LineGroup → DN."""
+
+    _model = models.LineGroupMember
+    _modelname = "line_group_member"
+    _identifiers = (
+        "line_group__name", "line_group__phone_system__name",
+        "directory_number__extension", "directory_number__partition__name",
+    )
+    _attributes = ("line_selection_order",)
+
+    line_group__name: str
+    line_group__phone_system__name: str
+    directory_number__extension: str
+    directory_number__partition__name: str
+    line_selection_order: int = 0
+
+
+class HuntPilotModel(NautobotModel):
+    """DiffSync model for HuntPilot — dial pattern that triggers hunt-list distribution."""
+
+    _model = models.HuntPilot
+    _modelname = "hunt_pilot"
+    _identifiers = ("pattern", "partition__name", "partition__phone_system__name")
+    _attributes = (
+        "description", "hunt_list__name", "alerting_name", "max_hunt_duration",
+        "forward_hunt_no_answer_destination", "forward_hunt_busy_destination",
+        "vendor_extras",
+    )
+
+    pattern: str
+    partition__name: str
+    partition__phone_system__name: str
+    description: str = ""
+    hunt_list__name: Optional[str] = None
+    alerting_name: str = ""
+    max_hunt_duration: Optional[int] = None
+    forward_hunt_no_answer_destination: str = ""
+    forward_hunt_busy_destination: str = ""
+    vendor_extras: dict = {}
+
+
 class AnalogGatewayModel(NautobotModel):
     """DiffSync model for AnalogGateway."""
 

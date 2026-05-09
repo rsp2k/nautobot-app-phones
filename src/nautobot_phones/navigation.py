@@ -101,6 +101,27 @@ menu_items = (
                 ),
             ),
             NavMenuGroup(
+                name="Hunt",
+                weight=450,
+                items=(
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:huntpilot_list",
+                        name="Hunt Pilots",
+                        permissions=["nautobot_phones.view_huntpilot"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:huntlist_list",
+                        name="Hunt Lists",
+                        permissions=["nautobot_phones.view_huntlist"],
+                    ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:linegroup_list",
+                        name="Line Groups",
+                        permissions=["nautobot_phones.view_linegroup"],
+                    ),
+                ),
+            ),
+            NavMenuGroup(
                 name="Dial Plan",
                 weight=500,
                 items=(

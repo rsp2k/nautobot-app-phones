@@ -25,6 +25,11 @@ from nautobot_phones.diffsync.models import (
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DirectoryNumberModel,
+    HuntListMemberModel,
+    HuntListModel,
+    HuntPilotModel,
+    LineGroupMemberModel,
+    LineGroupModel,
     LineModel,
     PartitionModel,
     PhoneModel,
@@ -59,6 +64,11 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
     analog_port = AnalogPortModel
+    hunt_list = HuntListModel
+    line_group = LineGroupModel
+    hunt_list_member = HuntListMemberModel
+    line_group_member = LineGroupMemberModel
+    hunt_pilot = HuntPilotModel
 
     top_level = (
         "phone_system",
@@ -78,6 +88,13 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "translation_pattern",
         "analog_gateway",
         "analog_port",
+        # Hunt subsystem — order: groups first (referenced by lists),
+        # lists next (referenced by pilots), members last.
+        "line_group",
+        "hunt_list",
+        "line_group_member",
+        "hunt_list_member",
+        "hunt_pilot",
     )
 
     # Models that only get populated by per-phone getPhone enrichment.

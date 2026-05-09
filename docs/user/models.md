@@ -30,6 +30,11 @@ section of the [Sync Reference](sync_reference.md) for field details.
 | `TranslationPattern` | `PrimaryModel` | (`partition`, `pattern`) | Pre-routing digit rewrite |
 | `AnalogGateway` | `PrimaryModel` | (`phone_system`, `name`) | VG450/VG350/etc. |
 | `AnalogPort` | `BaseModel` | (`gateway`, `port_index`) | FXS/FXO port |
+| `HuntPilot` | `PrimaryModel` | (`partition`, `pattern`) | Pattern dialed to enter a HuntList |
+| `HuntList` | `PrimaryModel` | (`phone_system`, `name`) | Ordered set of LineGroups |
+| `LineGroup` | `PrimaryModel` | (`phone_system`, `name`) | Ordered set of DNs + hunt algorithm |
+| `HuntListMember` | `BaseModel` | (`hunt_list`, `line_group`) | Through-table with selection_order |
+| `LineGroupMember` | `BaseModel` | (`line_group`, `directory_number`) | Through-table with line_selection_order |
 
 ## Vendor-specific data: `vendor_extras` JSONField
 
