@@ -286,9 +286,9 @@ class CUCMSourceAdapter(Adapter):
                 vendor_extras=_extract_extras(row, exclude={"pattern", "routePartitionName", "alertingName"}),
             ))
 
-    # Device-name prefix → device_kind value. Anything not in this dict is
-    # currently out of scope (CTI ports, gateway-side analog phones land in
-    # follow-up phases with their own model semantics).
+    # Device-name prefix → device_kind value. AN4 (gateway-side analog
+    # phones) is intentionally excluded — those become AnalogPort records
+    # tied to an AnalogGateway rather than Phone records.
     _PHONE_KINDS_BY_PREFIX = {
         "SEP": "sep",  # Physical IP phones — real MAC, full hardware
         "CSF": "csf",  # Cisco Jabber Desktop (Windows/Mac)
@@ -296,6 +296,9 @@ class CUCMSourceAdapter(Adapter):
         "BOT": "bot",  # Cisco Jabber for Android
         "CSK": "csk",  # CSF variant
         "ATA": "ata",  # Cisco ATA-19x analog terminal adapter
+        "CCX": "ccx",  # Contact Center Express CTI port (call-forward target)
+        "CER": "cer",  # Emergency Responder CTI port (CER-CTI-* devices)
+        "CTI": "cti",  # Custom CTI port (operator-named virtual endpoint)
     }
 
     def _load_phones_and_lines(self, ps_name: str) -> None:
@@ -306,10 +309,9 @@ class CUCMSourceAdapter(Adapter):
 
             # Dispatch on device_name prefix. SEP/ATA encode a real MAC in the
             # name (15 chars: 3-letter prefix + 12 hex MAC). CSF/TCT/BOT/CSK
-            # encode a username (variable length). Anything else (CCX, CER,
-            # CTI, AN4) is out of scope for v1 — they're CTI ports or gateway
-            # analog phones, conceptually different from "phone endpoints"
-            # and modeled separately.
+            # encode a username (variable length). CCX/CER/CTI are virtual
+            # call-routing endpoints (no hardware, no user). AN4 alone is
+            # excluded — those become AnalogPort records on AnalogGateways.
             prefix = device_name[:3] if len(device_name) >= 3 else ""
             kind = self._PHONE_KINDS_BY_PREFIX.get(prefix)
             if kind is None:
@@ -436,7 +438,7 @@ class CUCMSourceAdapter(Adapter):
                 ))
 
         if skipped_non_phone and self.job:
-            self.job.logger.info(f"Skipped {skipped_non_phone} non-phone records (CTI ports, gateway-attached analog phones — modeled separately)")
+            self.job.logger.info(f"Skipped {skipped_non_phone} non-phone records (gateway-attached analog phones modeled as AnalogPort records, plus any unrecognized prefixes)")
 
         # Optional second-phase: per-phone getPhone to populate line membership.
         # Slow — ~200-400ms per call, so this is off by default.

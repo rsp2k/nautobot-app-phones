@@ -18,7 +18,7 @@
 | Field | Source | Notes |
 |-------|--------|-------|
 | `device_name` | AXL `name` | Canonical CCM identifier |
-| `device_kind` | derived from name prefix | `sep`/`csf`/`tct`/`bot`/`csk`/`ata`/`cti`/`other` |
+| `device_kind` | derived from name prefix | `sep`/`csf`/`tct`/`bot`/`csk`/`ata`/`ccx`/`cer`/`cti`/`other` |
 | `mac_address` | derived (SEP/ATA) or null (softphones) | |
 | `description` | AXL `description` | |
 | `device_pool` | AXL `devicePoolName` | |

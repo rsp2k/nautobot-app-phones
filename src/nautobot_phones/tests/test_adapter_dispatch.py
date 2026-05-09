@@ -26,6 +26,9 @@ class TestPrefixDispatch(SimpleTestCase):
             "BOT": "bot",
             "CSK": "csk",
             "ATA": "ata",
+            "CCX": "ccx",
+            "CER": "cer",
+            "CTI": "cti",
         }
         for prefix, kind in expected.items():
             self.assertEqual(
@@ -33,14 +36,14 @@ class TestPrefixDispatch(SimpleTestCase):
                 f"Prefix {prefix!r} should map to kind {kind!r}",
             )
 
-    def test_cti_port_prefixes_excluded(self) -> None:
-        """CTI ports (CCX/CER/CTI) and gateway-attached phones (AN4) are
-        deliberately NOT in the table — they're modeled separately."""
-        for prefix in ("CCX", "CER", "CTI", "AN4"):
-            self.assertNotIn(
-                prefix, CUCMSourceAdapter._PHONE_KINDS_BY_PREFIX,
-                f"Prefix {prefix!r} should NOT be dispatched as a Phone",
-            )
+    def test_an4_prefix_excluded(self) -> None:
+        """AN4 (gateway-attached analog phones) is deliberately NOT in the
+        table — those become AnalogPort records tied to an AnalogGateway,
+        not Phone records."""
+        self.assertNotIn(
+            "AN4", CUCMSourceAdapter._PHONE_KINDS_BY_PREFIX,
+            "AN4 prefix should be dispatched to AnalogPort, not Phone",
+        )
 
     def test_all_dispatch_kinds_are_valid_choices(self) -> None:
         """Every dispatched value must be a valid PhoneDeviceKindChoices value

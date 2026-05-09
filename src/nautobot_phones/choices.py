@@ -126,13 +126,17 @@ class PhoneDeviceKindChoices(ChoiceSet):
       - BOT: Cisco Jabber for Android (`BOT<USERNAME>`)
       - CSK: Cisco Softphone variant (`CSK<USERNAME>`)
       - ATA: Cisco ATA-19x analog terminal adapter (`ATA<MAC>`)
-      - CTI: CTI port (call-routing virtual endpoint — modeled separately later)
+      - CCX: Contact Center Express CTI port (`CCX-<name>`)
+      - CER: Emergency Responder CTI port (`CER-CTI-<name>`)
+      - CTI: Custom CTI port (call-routing virtual endpoint, `CTI<name>`)
 
     SEP and ATA encode a real MAC in the device name. The Jabber variants
     (CSF/TCT/BOT/CSK) encode a username instead — they have no MAC, just
-    a CCM-side login identity. We use this field to filter "real phones"
-    vs softphones in the UI and to gate the device-creation pass (which
-    only makes sense for physical hardware).
+    a CCM-side login identity. CCX/CER/CTI are virtual call-routing
+    endpoints with no hardware — they exist purely to receive, queue, or
+    forward calls per CCM dial-plan rules. We use this field to filter
+    "real phones" vs softphones vs CTI ports in the UI and to gate the
+    device-creation pass (which only runs for physical hardware).
     """
 
     SEP = "sep"
@@ -141,6 +145,8 @@ class PhoneDeviceKindChoices(ChoiceSet):
     BOT = "bot"
     CSK = "csk"
     ATA = "ata"
+    CCX = "ccx"
+    CER = "cer"
     CTI = "cti"
     OTHER = "other"
 
@@ -151,6 +157,8 @@ class PhoneDeviceKindChoices(ChoiceSet):
         (BOT, "Jabber Android (BOT)"),
         (CSK, "Cisco Softphone Variant (CSK)"),
         (ATA, "Analog Terminal Adapter (ATA)"),
-        (CTI, "CTI Port"),
+        (CCX, "Contact Center CTI Port (CCX)"),
+        (CER, "Emergency Responder CTI Port (CER)"),
+        (CTI, "Custom CTI Port"),
         (OTHER, "Other"),
     )

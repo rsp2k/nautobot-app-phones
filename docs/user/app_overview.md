@@ -19,7 +19,10 @@ The app pulls data from a CCM cluster's **AXL SOAP API** (configuration) and
 - `Carrier` — telecom provider per DIDBlock
 
 ### Endpoints
-- `Phone` — every CCM phone-class device (SEP/CSF/TCT/BOT/CSK/ATA)
+- `Phone` — every CCM phone-class device. Eight `device_kind` values:
+  SEP (physical IP), CSF (Jabber Desktop), TCT (Jabber iOS), BOT (Jabber Android),
+  CSK (CSF variant), ATA (analog terminal adapter), CCX (Contact Center CTI),
+  CER (Emergency Responder CTI), CTI (custom virtual endpoint)
 - `Line` — a DN appearance on a phone button (max calls, busy trigger, MWI policy)
 - `SpeedDial` — speed-dial button on a phone
 - `BusyLampField` — BLF watch button (presence-aware speed dial)

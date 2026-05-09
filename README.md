@@ -129,7 +129,7 @@ For analog gateways, the sync materializes **FXS/FXO port Interfaces** named in 
 | RisPort70 live status | ✅ shipping |
 | AnalogGateway → DCIM matching | ✅ shipping |
 | FreePBX 17 adapter | 🚧 not started |
-| CTI port modeling | 🚧 not started |
+| CTI port modeling | ✅ shipping (CCX/CER/CTI prefixes) |
 | Comprehensive test suite | 🚧 minimal |
 | MkDocs documentation site | 🚧 README-only currently |
 
