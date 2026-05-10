@@ -138,6 +138,18 @@ services:
     # reverse-proxies via the labels below for normal browser access.
     ports:
       - "127.0.0.1:8085:8080"
+    # Override the base image's healthcheck (which runs `nautobot-server
+    # health_check` — a management command that cold-boots Django + plugins
+    # on every probe, ~5s and ~1 CPU-core). Web container exposes
+    # Nautobot's in-process /health/ via the running uWSGI worker, ~50×
+    # cheaper. Caddy already reverse-proxies this container, so an
+    # unresponsive uWSGI surfaces at the HTTP layer first anyway.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://127.0.0.1:8080/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
     networks:
       - internal
       - caddy
@@ -157,6 +169,16 @@ services:
     # docker-entrypoint.sh still runs first — it creates media/static dirs
     # with correct permissions before exec'ing whatever's passed here.
     command: ["nautobot-server", "celery", "worker", "-l", "INFO"]
+    # Worker has no HTTP server, so we keep the management-command probe
+    # — but stretch the interval from the upstream 10s to 60s. Each
+    # invocation cold-boots Django (~5s, ~1 CPU-core); 60s is plenty for
+    # liveness in a dev stack. 30s timeout absorbs slow boots under load.
+    healthcheck:
+      test: ["CMD-SHELL", "nautobot-server health_check"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 5m
     networks:
       - internal
       - freepbx-net
