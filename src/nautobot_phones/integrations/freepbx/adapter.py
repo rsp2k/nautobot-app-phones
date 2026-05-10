@@ -40,6 +40,7 @@ from nautobot_phones.diffsync.models import (
     PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
+    RouteListMemberModel,
     RouteListModel,
     RoutePatternModel,
     SpeedDialModel,
@@ -93,6 +94,7 @@ class FreePBXSourceAdapter(Adapter):
     trunk = TrunkModel
     route_list = RouteListModel
     route_group = RouteGroupModel
+    route_list_member = RouteListMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -123,6 +125,7 @@ class FreePBXSourceAdapter(Adapter):
         "trunk",
         "route_list",
         "route_group",
+        "route_list_member",
         "route_pattern",
         "translation_pattern",
         "analog_gateway",
@@ -386,16 +389,16 @@ class FreePBXSourceAdapter(Adapter):
                         vendor_extras={"synthesized_from": "freepbx_trunk"},
                     ))
                     seen_groups.add(trunk_name)
-                # We don't have a route_list_member DiffSync class registered
-                # in the source adapter's class-attrs — skipping for now;
-                # operators can see the priority via vendor_extras["trunk_seq"]
-                # on the RouteList.
-
-            # Stash the trunk-priority list on the RouteList for visibility
-            # since we don't emit RouteListMember rows yet (would need to add
-            # the through-table DiffSync class to the source adapter — fine
-            # follow-up since RouteListMember does exist on the destination).
-            # TODO(stage-6): emit RouteListMember rows.
+                # Emit the through-table row so the RouteList's RouteGroup
+                # priority is operator-visible. seq from FreePBX is 1-based;
+                # we keep that semantic since RouteListMember.priority docs
+                # say "lower number = evaluated first".
+                self.add(self.route_list_member(
+                    route_list__name=route_name,
+                    route_list__phone_system__name=ps_name,
+                    route_group__name=trunk_name,
+                    priority=int(seq),
+                ))
 
             # 3) One RoutePattern per pattern row, targeting this RouteList.
             for idx, p in enumerate(r.get("patterns", []) or []):

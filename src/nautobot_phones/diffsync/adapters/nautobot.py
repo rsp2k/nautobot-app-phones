@@ -39,6 +39,7 @@ from nautobot_phones.diffsync.models import (
     PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
+    RouteListMemberModel,
     RouteListModel,
     RoutePatternModel,
     SpeedDialModel,
@@ -68,6 +69,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     trunk = TrunkModel
     route_list = RouteListModel
     route_group = RouteGroupModel
+    route_list_member = RouteListMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -98,6 +100,8 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "trunk",
         "route_list",
         "route_group",
+        # Through-table comes after both parents are loaded.
+        "route_list_member",
         "route_pattern",
         "translation_pattern",
         "analog_gateway",

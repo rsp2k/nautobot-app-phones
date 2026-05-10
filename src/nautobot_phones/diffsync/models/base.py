@@ -285,6 +285,29 @@ class RouteGroupModel(NautobotModel):
     vendor_extras: dict = {}
 
 
+class RouteListMemberModel(NautobotModel):
+    """DiffSync through-table — RouteList ↔ RouteGroup with priority.
+
+    Identifier shape (route_list_name, phone_system_name, route_group_name)
+    — phone_system is denormalized for stability since both RouteList and
+    RouteGroup belong to the same PhoneSystem and we want priority order
+    cross-vendor-portable.
+    """
+
+    _model = models.RouteListMember
+    _modelname = "route_list_member"
+    _identifiers = (
+        "route_list__name", "route_list__phone_system__name",
+        "route_group__name",
+    )
+    _attributes = ("priority",)
+
+    route_list__name: str
+    route_list__phone_system__name: str
+    route_group__name: str
+    priority: int = 0
+
+
 class RoutePatternModel(NautobotModel):
     """DiffSync model for RoutePattern.
 
