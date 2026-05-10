@@ -325,6 +325,8 @@ class RoutePatternModel(NautobotModel):
         "discard_digits",
         "target_trunk__name",
         "target_route_list__name",
+        "target_dn__extension",
+        "target_dn__partition__name",
         "css__name",
     )
 
@@ -335,6 +337,11 @@ class RoutePatternModel(NautobotModel):
     discard_digits: str = ""
     target_trunk__name: Optional[str] = None
     target_route_list__name: Optional[str] = None
+    # target_dn is a FK to DirectoryNumber. The natural-key chain here
+    # mirrors how DirectoryNumber is identified (by extension within
+    # a partition), so the contrib framework can resolve it at sync time.
+    target_dn__extension: Optional[str] = None
+    target_dn__partition__name: Optional[str] = None
     css__name: Optional[str] = None
 
 

@@ -196,6 +196,36 @@ class FreePBXClient:
         wrapper = data.get("fetchAllExtensions") or {}
         return wrapper.get("extension") or []
 
+    def list_inbound_routes(self) -> list[dict]:
+        """Fetch all inbound routes via the allInboundRoutes GraphQL query.
+
+        Returns one dict per inbound route. Key fields:
+
+          - ``extension`` — the DID being matched
+          - ``cidnum`` — caller-ID match (empty = match any caller)
+          - ``description`` — operator-facing label
+          - ``destinationConnection`` — human-readable destination string;
+            FreePBX renders it like ``"Extensions: 1001 Alice Engineering"``
+            or ``"Ring Groups: 600 Sales Team"``. The adapter parses the
+            type prefix to decide which target FK to populate.
+          - behavior flags (privacyman, alertinfo, ringing, mohclass, etc.)
+        """
+        gql = """
+        query {
+          allInboundRoutes {
+            totalCount
+            inboundRoutes {
+              id extension cidnum description destinationConnection
+              privacyman alertinfo ringing mohclass grppre delay_answer
+              pricid pmmaxretries pmminlength reversal rvolume fanswer
+            }
+          }
+        }
+        """
+        data = self.query(gql)
+        wrapper = data.get("allInboundRoutes") or {}
+        return wrapper.get("inboundRoutes") or []
+
     def list_voicemail_boxes(self, extension_ids: list[str]) -> dict[str, dict]:
         """Fetch voicemail-box config for each extension that has one.
 

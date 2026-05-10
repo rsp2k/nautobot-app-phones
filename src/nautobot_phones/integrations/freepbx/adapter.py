@@ -203,8 +203,10 @@ class FreePBXSourceAdapter(Adapter):
         # DirectoryNumber records to point at the synthesized profile FK.
         self._load_voicemail_profiles(ps.name)
 
-        # Stages 6c+:
-        # self._load_inbound_routes(ps.name)
+        # Stage 6c: inbound routes → RoutePattern (incoming-side).
+        self._load_inbound_routes(ps.name)
+
+        # Stages 6d+:
         # self._load_ring_groups(ps.name)
         # self._load_pickup_groups(ps.name)
 
@@ -478,3 +480,68 @@ class FreePBXSourceAdapter(Adapter):
             }) if hasattr(self, "get") else None
             if dn is not None:
                 dn.voicemail_profile__name = profile_name
+
+    # ----- Inbound routes ---------------------------------------------------
+
+    # destinationConnection from FreePBX is rendered as
+    # "<TypePrefix>: <id> <description>" — parse out the type and id
+    # so we can pick the correct RoutePattern target FK.
+    _DEST_PARSERS = {
+        "Extensions": "ext",
+        "Ring Groups": "ringgroup",   # mapped to target_route_list once stage 6e lands
+        # IVR / Queues / Voicemail / Terminate / Custom — currently skipped
+        # since there's no RoutePattern target FK to point them at.
+    }
+
+    def _load_inbound_routes(self, ps_name: str) -> None:
+        """Walk allInboundRoutes, emit one RoutePattern (incoming side) per record.
+
+        FreePBX inbound routes match on a DID (and optionally CID) and
+        send the call to a destination — typically an extension, ring
+        group, queue, IVR, or voicemail. Our schema has RoutePattern
+        with three mutually-exclusive target FKs (target_trunk,
+        target_route_list, target_dn); we map by destination type.
+
+        Currently we only handle ``Extensions:`` destinations (target_dn).
+        Ring-group destinations get a TODO once stage-6e lands; queue/
+        IVR destinations are skipped (no model). Skipped routes log
+        their destination string so operators can audit coverage.
+        """
+        import re
+        ext_re = re.compile(r"^Extensions:\s+(\d+)")
+
+        for r in self.client.list_inbound_routes():
+            did = (r.get("extension") or "").strip()
+            if not did:
+                continue
+            cidnum = (r.get("cidnum") or "").strip()
+            # If both DID + CID are set, FreePBX matches on the pair; encode
+            # that into the pattern as "<DID>/<CID>" for visibility.
+            pattern = f"{did}/{cidnum}" if cidnum else did
+
+            dest_str = (r.get("destinationConnection") or "").strip()
+            target_dn_extension = None
+            m = ext_re.match(dest_str)
+            if m:
+                target_dn_extension = m.group(1)
+
+            if target_dn_extension is None:
+                # Non-extension destination (ring group / queue / IVR /
+                # voicemail / terminate / custom). Skip for now —
+                # logging would need a job reference; defer.
+                continue
+
+            self.add(self.route_pattern(
+                pattern=pattern,
+                partition__name=DEFAULT_PARTITION_NAME,
+                partition__phone_system__name=ps_name,
+                css__name=None,
+                # XOR target — for inbound routes hitting an extension,
+                # only target_dn is set.
+                target_trunk__name=None,
+                target_route_list__name=None,
+                target_dn__extension=target_dn_extension,
+                target_dn__partition__name=DEFAULT_PARTITION_NAME,
+                urgent=False,
+                discard_digits="",
+            ))
