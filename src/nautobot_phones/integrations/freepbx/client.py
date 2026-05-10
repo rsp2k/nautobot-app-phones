@@ -196,6 +196,39 @@ class FreePBXClient:
         wrapper = data.get("fetchAllExtensions") or {}
         return wrapper.get("extension") or []
 
+    def list_voicemail_boxes(self, extension_ids: list[str]) -> dict[str, dict]:
+        """Fetch voicemail-box config for each extension that has one.
+
+        FreePBX 17's GraphQL has no bulk fetch — we must call
+        ``fetchVoiceMail`` per-extension. Returns ``{ext_id: vm_dict}``
+        only for extensions whose voicemail is actually enabled
+        (detected via ``context != null`` — disabled boxes return all
+        nulls). Token caching keeps the per-call overhead small.
+
+        For 1000+ extension deployments this can take 30-60 seconds.
+        Consider gating behind an ``enrich_voicemail`` Job toggle the
+        way the CCM adapter does ``enrich_phone_lines``. Currently
+        always-on; revisit if it becomes a bottleneck.
+        """
+        boxes: dict[str, dict] = {}
+        # Note: arg type is `ID!` not `String!` despite the introspection
+        # probe reporting `String` for the field args list. Discovered at
+        # runtime — GraphQL servers are allowed to coerce ID↔String for
+        # field args but not for query variables.
+        gql = (
+            "query($ext: ID!) { fetchVoiceMail(extensionId: $ext) "
+            "{ context name email pager attach saycid envelope delete } }"
+        )
+        for ext_id in extension_ids:
+            try:
+                data = self.query(gql, {"ext": ext_id})
+            except FreePBXAPIError:
+                continue
+            vm = data.get("fetchVoiceMail") or {}
+            if vm.get("context"):  # null context = VM not configured for this ext
+                boxes[ext_id] = vm
+        return boxes
+
     def list_trunks(self) -> list[dict]:
         """Fetch all trunks via direct MariaDB query.
 

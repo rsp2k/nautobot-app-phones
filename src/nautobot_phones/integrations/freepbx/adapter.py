@@ -189,6 +189,9 @@ class FreePBXSourceAdapter(Adapter):
         ))
 
         # Stage 4: extensions → DirectoryNumber + Phone
+        # Captures the extension list so stage-6b can cross-reference
+        # without re-querying GraphQL.
+        self._extension_ids: list[str] = []
         self._load_extensions(ps.name)
 
         # Stage 5: trunks + outbound routes (read direct from MariaDB —
@@ -196,8 +199,12 @@ class FreePBXSourceAdapter(Adapter):
         self._load_trunks(ps.name)
         self._load_outbound_routes(ps.name)
 
-        # Stages 6+:
-        # self._load_voicemail_profiles(ps.name)
+        # Stage 6b: voicemail boxes per extension. Updates already-emitted
+        # DirectoryNumber records to point at the synthesized profile FK.
+        self._load_voicemail_profiles(ps.name)
+
+        # Stages 6c+:
+        # self._load_inbound_routes(ps.name)
         # self._load_ring_groups(ps.name)
         # self._load_pickup_groups(ps.name)
 
@@ -225,6 +232,7 @@ class FreePBXSourceAdapter(Adapter):
             extension_id = (ext.get("extensionId") or "").strip()
             if not extension_id:
                 continue
+            self._extension_ids.append(extension_id)
             user = ext.get("user") or {}
             core_device = ext.get("coreDevice") or {}
             tech = (ext.get("tech") or "").strip()
@@ -421,3 +429,52 @@ class FreePBXSourceAdapter(Adapter):
                     urgent=False,
                     discard_digits="",
                 ))
+
+    # ----- Voicemail profiles ------------------------------------------------
+
+    def _load_voicemail_profiles(self, ps_name: str) -> None:
+        """For each VM-enabled extension, emit a VoicemailProfile + cross-link the DN.
+
+        FreePBX's voicemail config is per-extension (no shared profiles
+        like CCM has), so we synthesize one ``VoicemailProfile`` per
+        extension that has VM enabled. Profile name follows
+        ``vm-<extensionId>`` so it's stable across syncs and
+        deterministic for diff comparison.
+
+        Cross-linking the DN means re-emitting it with the FK populated.
+        DiffSync's update path detects the changed attribute and applies
+        it — no need to delete-and-recreate.
+        """
+        if not self._extension_ids:
+            return
+        boxes = self.client.list_voicemail_boxes(self._extension_ids)
+        if not boxes:
+            return
+
+        for ext_id, vm in boxes.items():
+            profile_name = f"vm-{ext_id}"
+            extras: dict = {}
+            for fld in ("context", "pager", "attach", "saycid", "envelope", "delete"):
+                v = vm.get(fld)
+                if v not in (None, ""):
+                    extras[fld] = v
+            self.add(self.voicemail_profile(
+                name=profile_name,
+                phone_system__name=ps_name,
+                description=(vm.get("name") or ext_id),
+                pilot_dn="",      # FreePBX uses the global *97 feature code
+                is_default=False,
+                vendor_extras=extras,
+            ))
+
+            # Re-emit the DN with the voicemail_profile__name FK set.
+            # Skip if we don't have the matching DN in our diff (defensive
+            # — should always exist after _load_extensions but extension
+            # lookup is by extensionId not by DN-extension if those differ).
+            dn = self.get(self.directory_number, {
+                "extension": ext_id,
+                "partition__name": DEFAULT_PARTITION_NAME,
+                "partition__phone_system__name": ps_name,
+            }) if hasattr(self, "get") else None
+            if dn is not None:
+                dn.voicemail_profile__name = profile_name
