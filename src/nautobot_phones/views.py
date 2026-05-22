@@ -16,9 +16,37 @@ from nautobot.apps.ui import (
     ObjectDetailContent,
     ObjectFieldsPanel,
     ObjectsTablePanel,
+    Panel,
     SectionChoices,
 )
 from nautobot.apps.views import NautobotUIViewSet
+
+from nautobot_phones.heatmap import build_heatmap_data
+
+
+class DIDHeatmapPanel(Panel):
+    """Renders the DID-inventory heatmap below the SipCircuitProfile field panel.
+
+    Uses the standard ``body_content_template_path`` mechanism — the template
+    receives the page's existing context plus a ``heatmap`` key built by
+    ``build_heatmap_data(profile)`` injected via ``get_extra_context()``.
+    """
+
+    label = "DID Heatmap"
+    body_content_template_path = "nautobot_phones/inc/did_heatmap.html"
+
+    def get_extra_context(self, context):
+        """Add ``heatmap`` to the panel-rendering context."""
+        ctx = super().get_extra_context(context) if hasattr(super(), "get_extra_context") else {}
+        obj = context.get("object")
+        if obj is not None:
+            ctx["heatmap"] = build_heatmap_data(obj)
+        return ctx
+
+    def render_body_content(self, context):
+        """Merge heatmap data into context, then delegate to the template path."""
+        context.update(self.get_extra_context(context))
+        return super().render_body_content(context)
 
 
 def _https_link(value):
@@ -179,6 +207,13 @@ class SipCircuitProfileUIViewSet(NautobotUIViewSet):
                 label="Vendor-specific config (long-tail)",
                 fields=["vendor_extras"],
                 value_transforms={"vendor_extras": [_vendor_extras_summary]},
+            ),
+            # Full-width DID inventory heatmap. Renders 100-cell grids per
+            # hundred-block, grouped by NPA-NXX. Color-codes routing status
+            # once DIDAssignment data is populated; for now everything is
+            # "unrouted" + the pilot E.164 highlighted yellow.
+            DIDHeatmapPanel(
+                section=SectionChoices.FULL_WIDTH, weight=300,
             ),
             # DID blocks/Trunks attached to the same circuit show up on the
             # circuits.Circuit detail page natively via the FKs we added —

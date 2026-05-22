@@ -1,0 +1,99 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'nautobot_phones/css/heatmap.css' %}">
+
+<div class="dh-root">
+  <div class="dh-summary">
+    <div class="dh-summary-card">
+      <div class="dh-summary-label">Pilot number</div>
+      <div class="dh-summary-value">{{ heatmap.pilot_e164|default:"—" }}</div>
+      <div class="dh-summary-sub">Published main number; also the OLI/CLID for outbound calls.</div>
+    </div>
+    <div class="dh-summary-card">
+      <div class="dh-summary-label">Concurrent capacity</div>
+      <div class="dh-summary-value">{{ object.sip_sessions }} <span class="dh-summary-unit">SIP sessions</span></div>
+      <div class="dh-summary-sub">Every call in or out of the site shares this ceiling.</div>
+    </div>
+    <div class="dh-summary-card">
+      <div class="dh-summary-label">DID inventory</div>
+      <div class="dh-summary-value">{{ heatmap.total_dids }} <span class="dh-summary-unit">total</span></div>
+      <div class="dh-summary-sub">
+        <span class="dh-pill dh-pill-routed">{{ heatmap.total_routed }} routed</span>
+        <span class="dh-pill dh-pill-unrouted">{{ heatmap.total_unrouted }} unrouted</span>
+      </div>
+    </div>
+    <div class="dh-summary-card">
+      <div class="dh-summary-label">Source</div>
+      <div class="dh-summary-value dh-summary-source">{{ object.source_doc|default:"—" }}</div>
+      <div class="dh-summary-sub">{{ object.cut_sheet_received_date|date:"Y-m-d"|default:"date unknown" }}</div>
+    </div>
+  </div>
+
+  <div class="dh-toolbar">
+    <input type="search" class="dh-search" placeholder="Filter cells — digits only, partial match" aria-label="Filter DIDs">
+    <div class="dh-legend">
+      <span class="dh-legend-item"><span class="dh-cell dh-cell--routed"></span> routed</span>
+      <span class="dh-legend-item"><span class="dh-cell dh-cell--unrouted"></span> unrouted</span>
+      <span class="dh-legend-item"><span class="dh-cell dh-cell--pilot"></span> pilot</span>
+      <span class="dh-legend-item"><span class="dh-cell dh-cell--gap"></span> gap</span>
+    </div>
+  </div>
+
+  {% for group in heatmap.groups %}
+    <section class="dh-group" data-npa-nxx="{{ group.npa_nxx }}">
+      <header class="dh-group-header">
+        <span class="dh-group-prefix">{{ group.npa_nxx }}</span>
+        <span class="dh-group-meta">{{ group.dids_count }} DIDs &middot; {{ group.hundred_blocks_count }} hundred-block{{ group.hundred_blocks_count|pluralize }}</span>
+        <span class="dh-group-routed">{{ group.routed_count }}/{{ group.dids_count }} routed</span>
+      </header>
+      <div class="dh-blocks">
+        {% for hb in group.hundred_blocks %}
+          <div class="dh-block" data-prefix-8="{{ hb.prefix_8 }}">
+            <div class="dh-block-header">
+              <span class="dh-block-label">{{ hb.label }}</span>
+              <span class="dh-block-ratio">{{ hb.filled_count }}/100</span>
+            </div>
+            <div class="dh-grid">
+              {% for cell in hb.cells %}
+                <span class="dh-cell dh-cell--{{ cell.status }}"
+                      data-e164="{{ cell.e164|default:'' }}"
+                      data-status="{{ cell.status }}"
+                      {% if cell.e164 %}title="{{ cell.e164 }} ({{ cell.status }})"{% endif %}></span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% empty %}
+    <div class="dh-empty">No DIDs attached to this circuit yet.</div>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  // Client-side filter: dims any cell whose e164 doesn't include the search query.
+  // 1,757 DOM nodes for SparkLight Bingham — well within "no virtualization needed".
+  const root = document.currentScript.previousElementSibling
+            || document.querySelector('.dh-root');
+  if (!root) return;
+  const input = root.querySelector('.dh-search');
+  if (!input) return;
+
+  const cells = root.querySelectorAll('.dh-cell[data-e164]');
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (!q) {
+      cells.forEach(c => c.classList.remove('dh-cell--dim'));
+      return;
+    }
+    cells.forEach(c => {
+      const e164 = c.getAttribute('data-e164');
+      if (!e164) {
+        c.classList.add('dh-cell--dim');
+        return;
+      }
+      c.classList.toggle('dh-cell--dim', !e164.includes(q));
+    });
+  });
+})();
+</script>

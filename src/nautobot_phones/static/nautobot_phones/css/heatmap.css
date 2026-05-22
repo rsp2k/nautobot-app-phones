@@ -1,0 +1,202 @@
+/* DID Heatmap — 10x10 grid per hundred-block, grouped by NPA-NXX.
+   Theme-aware via CSS custom properties; falls back to dark-tuned defaults
+   so it looks right in Nautobot's default dark theme. */
+
+.dh-root {
+  --dh-bg-card:     #1f2233;
+  --dh-bg-grid:     #16182a;
+  --dh-border:      #2a2f47;
+  --dh-text:        #e6e9f5;
+  --dh-text-muted:  #8b93b3;
+  --dh-routed:      #4ade80;   /* green */
+  --dh-unrouted:    #f87171;   /* red */
+  --dh-pilot:       #facc15;   /* yellow */
+  --dh-gap:         #2a2f47;   /* near-bg, very faint */
+  --dh-present:     #60a5fa;   /* blue — used if status='present' */
+
+  color: var(--dh-text);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* --- summary cards --------------------------------------------------- */
+.dh-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.dh-summary-card {
+  background: var(--dh-bg-card);
+  border: 1px solid var(--dh-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+.dh-summary-label {
+  color: var(--dh-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+.dh-summary-value {
+  color: var(--dh-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.dh-summary-value.dh-summary-source {
+  font-size: 0.95rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+.dh-summary-unit {
+  color: var(--dh-text-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.dh-summary-sub {
+  color: var(--dh-text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+}
+.dh-pill {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 500;
+  margin-right: 0.25rem;
+}
+.dh-pill-routed   { background: rgba(74, 222, 128, 0.15); color: var(--dh-routed); }
+.dh-pill-unrouted { background: rgba(248, 113, 113, 0.15); color: var(--dh-unrouted); }
+
+/* --- toolbar (search + legend) -------------------------------------- */
+.dh-toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.dh-search {
+  flex: 1 1 280px;
+  background: var(--dh-bg-card);
+  border: 1px solid var(--dh-border);
+  border-radius: 6px;
+  color: var(--dh-text);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.9rem;
+}
+.dh-search::placeholder { color: var(--dh-text-muted); }
+.dh-legend {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  color: var(--dh-text-muted);
+}
+.dh-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+.dh-legend .dh-cell {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+}
+
+/* --- group + block layout ------------------------------------------- */
+.dh-group {
+  background: var(--dh-bg-card);
+  border: 1px solid var(--dh-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem 1rem;
+  margin-bottom: 1rem;
+}
+.dh-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+.dh-group-prefix {
+  background: var(--dh-bg-grid);
+  border: 1px solid var(--dh-border);
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-weight: 600;
+  font-family: var(--__sl-font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+.dh-group-meta { color: var(--dh-text); }
+.dh-group-routed {
+  margin-left: auto;
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--dh-routed);
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.dh-blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.65rem;
+}
+.dh-block {
+  background: var(--dh-bg-grid);
+  border: 1px solid var(--dh-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.55rem 0.6rem;
+}
+.dh-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--dh-text-muted);
+  margin-bottom: 0.35rem;
+}
+.dh-block-label {
+  font-family: var(--__sl-font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  color: var(--dh-text);
+}
+.dh-block-ratio { font-family: var(--__sl-font-mono, ui-monospace, monospace); }
+
+/* --- the 10x10 cell grid -------------------------------------------- */
+.dh-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+  aspect-ratio: 1 / 1;
+}
+.dh-cell {
+  background: var(--dh-gap);
+  border-radius: 2px;
+  transition: opacity 100ms ease;
+  min-width: 8px;
+  min-height: 8px;
+}
+.dh-cell--routed   { background: var(--dh-routed); }
+.dh-cell--unrouted { background: var(--dh-unrouted); }
+.dh-cell--present  { background: var(--dh-present); }
+.dh-cell--pilot {
+  background: var(--dh-pilot);
+  /* Pilot cells get a subtle ring so they're locatable even after filtering. */
+  box-shadow: 0 0 0 1.5px var(--dh-pilot);
+  z-index: 1;
+}
+.dh-cell--gap { background: var(--dh-gap); }
+
+/* Filter-dim state — used by the search input's JS handler. */
+.dh-cell--dim { opacity: 0.18; }
+
+.dh-empty {
+  color: var(--dh-text-muted);
+  text-align: center;
+  padding: 2rem;
+  font-style: italic;
+}
