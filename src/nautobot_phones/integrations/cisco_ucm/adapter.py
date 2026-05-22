@@ -44,6 +44,7 @@ from nautobot_phones.diffsync.models import (
     PhoneServiceUrlModel,
     PhoneSystemModel,
     RouteGroupModel,
+    RouteListMemberModel,
     RouteListModel,
     RoutePatternModel,
     SpeedDialModel,
@@ -106,6 +107,7 @@ class CUCMSourceAdapter(Adapter):
     trunk = TrunkModel
     route_list = RouteListModel
     route_group = RouteGroupModel
+    route_list_member = RouteListMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -135,6 +137,8 @@ class CUCMSourceAdapter(Adapter):
         "trunk",
         "route_list",
         "route_group",
+        # Through-table comes after both parents are loaded.
+        "route_list_member",
         "route_pattern",
         "translation_pattern",
         "analog_gateway",
@@ -246,6 +250,9 @@ class CUCMSourceAdapter(Adapter):
         self._load_trunks(ps.name)
         self._load_route_lists(ps.name)
         self._load_route_groups(ps.name)
+        # RouteGroupMember GFK through-table — currently a no-op stub.
+        # See _load_route_group_members docstring for the DiffSync GFK gap.
+        self._load_route_group_members(ps.name)
         self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
         self._load_translation_patterns(ps.name)
         self._load_gateways_and_ports(ps.name)
@@ -633,12 +640,83 @@ class CUCMSourceAdapter(Adapter):
                 ))
 
     def _load_route_lists(self, ps_name: str) -> None:
+        """Emit RouteList records + their RouteListMember through-table rows.
+
+        Two-step load mirroring the hunt-subsystem pattern: listX returns
+        scalar fields only (name, description); the priority-ordered
+        RouteGroup membership lives in getRouteList's nested
+        ``.return.routeList.members.member[*]`` with ``routeGroupName``
+        XFkType refs and ``selectionOrder`` integers.
+
+        Per-record getX is ~50-100ms per RouteList. Typical clusters have
+        5-30 route lists, so this adds 1-3 seconds to the sync. Cheap
+        enough to leave on by default.
+        """
         for row in self.client.list_route_lists():
+            name = _get(row, "name", "") or ""
+            if not name:
+                continue
             self.add(self.route_list(
-                name=_get(row, "name", ""),
+                name=name,
                 phone_system__name=ps_name,
                 description=_get(row, "description", "") or "",
             ))
+
+            # Per-record enrichment for through-table membership.
+            try:
+                full = self.client._service.getRouteList(name=name)
+            except Exception:  # noqa: BLE001
+                continue
+            obj = _get(_get(full, "return"), "routeList")
+            members = _get(_get(obj, "members"), "member", []) or []
+            if not isinstance(members, list):
+                members = [members]
+            for m in members:
+                rg_ref = _get(m, "routeGroupName") or {}
+                rg_name = _get(rg_ref, "_value_1", "") if isinstance(rg_ref, dict) else _get(rg_ref, "_value_1", "")
+                if not rg_name:
+                    continue
+                order = _get(m, "selectionOrder")
+                try:
+                    priority = int(order) if order not in (None, "") else 1
+                except (TypeError, ValueError):
+                    priority = 1
+                self.add(self.route_list_member(
+                    route_list__name=name,
+                    route_list__phone_system__name=ps_name,
+                    route_group__name=rg_name,
+                    priority=priority,
+                ))
+
+    def _load_route_group_members(self, ps_name: str) -> None:
+        """Emit RouteGroupMember rows (currently a no-op stub).
+
+        Deferred. RouteGroupMember has a GenericForeignKey target
+        (Trunk OR AnalogGateway) that ``nautobot_ssot.contrib.NautobotModel``
+        doesn't resolve through natural-key chains the way regular FKs do.
+        Implementing it requires:
+
+          1. A DiffSync model class with composite-identifier shape
+             ``(route_group__name, target_kind, target_name)`` where
+             ``target_kind`` ∈ {"trunk", "analoggateway"}.
+          2. Custom ``create``/``update`` overrides that look up the
+             matching ContentType + resolve target_id from the
+             target_name within the right model's queryset.
+
+        Real-world value is moderate: most CCM RouteGroups contain a
+        single Trunk, and operators can see that membership via the
+        Trunk detail page's reverse FK panel. Multi-device RouteGroups
+        (Trunk + AnalogGateway in one group) are uncommon, and the
+        priority info IS preserved on the Trunk side via vendor_extras.
+
+        Revisit when a customer needs the through-table for reporting
+        or for cross-vendor ring-group analogues, AND we have the
+        bandwidth to write the GFK-aware DiffSync model.
+
+        Caller is wired up so the load() pass-through reads cleanly;
+        method is a no-op until the DiffSync infrastructure lands.
+        """
+        return  # explicit no-op
 
     def _load_route_groups(self, ps_name: str) -> None:
         for row in self.client.list_route_groups():
