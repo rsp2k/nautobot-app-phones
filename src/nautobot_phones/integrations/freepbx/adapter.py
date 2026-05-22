@@ -210,8 +210,9 @@ class FreePBXSourceAdapter(Adapter):
         # docstring for the data-path blocker).
         self._load_pickup_groups(ps.name)
 
-        # Stages 6e+:
-        # self._load_ring_groups(ps.name)
+        # Stage 6e: ring groups → HuntPilot + HuntList + LineGroup
+        # (+ HuntListMember + LineGroupMember through-tables).
+        self._load_ring_groups(ps.name)
 
     # -------------------------------------------- per-resource loaders
 
@@ -590,3 +591,130 @@ class FreePBXSourceAdapter(Adapter):
                     directory_number__partition__name=DEFAULT_PARTITION_NAME,
                     priority=0,
                 ))
+
+    # ----- Ring groups → Hunt subsystem -------------------------------------
+    # FreePBX strategy strings → our LineGroup.distribution_algorithm enum.
+    # Mapping uses each enum's canonical CCM/CDMA-flavored value since
+    # LineGroup.distribution_algorithm is a free-form CharField that
+    # accepts any string (no DB-level choice constraint). Operators
+    # querying "show me broadcast groups" get consistent results
+    # whether the source was CCM or FreePBX.
+    _FREEPBX_STRATEGY_TO_ALGORITHM = {
+        "ringall":         "Broadcast",
+        "ringall-prim":    "Broadcast",
+        "ringall-v2":      "Broadcast",
+        "ringall-v2-prim": "Broadcast",
+        "hunt":            "Top Down",
+        "hunt-prim":       "Top Down",
+        "firstavailable":  "Top Down",
+        "firstnotonphone": "Top Down",
+        "memoryhunt":      "Circular",
+        "memoryhunt-prim": "Circular",
+        "random":          "Top Down",  # closest match — random has no CCM equiv
+        "rrordered":       "Top Down",
+        "rrmemory":        "Circular",
+    }
+
+    def _load_ring_groups(self, ps_name: str) -> None:
+        """Walk the ringgroups table, expand each into a hunt-subsystem record set.
+
+        FreePBX ring groups collapse what CCM splits into three levels
+        (HuntPilot → HuntList → LineGroup) into a single record. We
+        synthesize all three so the schema operators see is uniform
+        across vendors:
+
+          - HuntPilot   ─ dialed pattern (grpnum)
+          - HuntList    ─ named after the ring group (description fallback)
+          - LineGroup   ─ holds the ordered extension list
+          - HuntListMember ─ 1 row linking HuntList → LineGroup
+          - LineGroupMember rows ─ one per member extension, with
+            line_selection_order matching position in grplist
+
+        grplist in FreePBX is hyphen-separated (``1001-1002-1003``).
+        Members ring in priority order (lower index = rings first)
+        regardless of strategy — strategy controls IF they ring
+        simultaneously or sequentially, not who's first.
+        """
+        for rg in self.client.list_ring_groups():
+            grpnum = str(rg.get("grpnum") or "").strip()
+            if not grpnum:
+                continue
+            desc = (rg.get("description") or f"Ring Group {grpnum}").strip()
+            strategy = (rg.get("strategy") or "").strip().lower()
+            algorithm = self._FREEPBX_STRATEGY_TO_ALGORITHM.get(strategy, "Top Down")
+            rna_timeout = rg.get("grptime") or None
+
+            # Stash FreePBX-specific behavior flags for fidelity.
+            extras: dict = {"freepbx_strategy": strategy}
+            for fld in ("alertinfo", "cwignore", "cfignore", "cpickup",
+                        "recording", "progress", "elsewhere", "rvolume", "ringing"):
+                v = rg.get(fld)
+                if v not in (None, "", 0, "0"):
+                    extras[fld] = v
+
+            # Synthesize names. The HuntList name doubles as the LineGroup
+            # name since FreePBX has no nested grouping concept; a 1:1
+            # HuntList↔LineGroup mapping is the cleanest unification.
+            list_name = f"{desc}".strip() or f"Ring Group {grpnum}"
+            group_name = list_name  # same name; the DiffSync identifiers
+                                    # already distinguish them by their
+                                    # respective model classes.
+
+            # 1) HuntList
+            self.add(self.hunt_list(
+                name=list_name,
+                phone_system__name=ps_name,
+                description=desc,
+                route_list_enabled=True,
+                voice_mail_usage=False,
+                vendor_extras={},
+            ))
+
+            # 2) LineGroup
+            self.add(self.line_group(
+                name=group_name,
+                phone_system__name=ps_name,
+                distribution_algorithm=algorithm,
+                rna_reversion_timeout=int(rna_timeout) if rna_timeout else None,
+                hunt_algorithm_no_answer="",   # CCM-specific natural-language
+                hunt_algorithm_busy="",        # phrases; FreePBX has no
+                hunt_algorithm_not_available="",  # equivalent
+                auto_log_off_hunt=False,
+                vendor_extras=extras,
+            ))
+
+            # 3) HuntListMember (1 row joining HuntList → LineGroup)
+            self.add(self.hunt_list_member(
+                hunt_list__name=list_name,
+                hunt_list__phone_system__name=ps_name,
+                line_group__name=group_name,
+                selection_order=1,
+            ))
+
+            # 4) LineGroupMember rows — one per extension in grplist.
+            grplist = str(rg.get("grplist") or "").strip()
+            for idx, ext_str in enumerate(grplist.split("-"), start=1):
+                ext_str = ext_str.strip()
+                if not ext_str:
+                    continue
+                self.add(self.line_group_member(
+                    line_group__name=group_name,
+                    line_group__phone_system__name=ps_name,
+                    directory_number__extension=ext_str,
+                    directory_number__partition__name=DEFAULT_PARTITION_NAME,
+                    line_selection_order=idx,
+                ))
+
+            # 5) HuntPilot — the pattern callers dial to enter the group.
+            self.add(self.hunt_pilot(
+                pattern=grpnum,
+                partition__name=DEFAULT_PARTITION_NAME,
+                partition__phone_system__name=ps_name,
+                description=desc,
+                hunt_list__name=list_name,
+                alerting_name=desc,
+                max_hunt_duration=int(rna_timeout) if rna_timeout else None,
+                forward_hunt_no_answer_destination="",
+                forward_hunt_busy_destination="",
+                vendor_extras={},
+            ))

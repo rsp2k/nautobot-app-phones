@@ -196,6 +196,30 @@ class FreePBXClient:
         wrapper = data.get("fetchAllExtensions") or {}
         return wrapper.get("extension") or []
 
+    def list_ring_groups(self) -> list[dict]:
+        """Fetch ring groups via direct MariaDB query.
+
+        FreePBX 17's `api` module 17.0.6 doesn't expose ring groups via
+        GraphQL — they live in the `ringgroups` table (FreePBX 13+).
+        Read-only SELECT; we never write through this connection.
+
+        Returns one dict per ring group with: grpnum, strategy, grptime,
+        grplist (hyphen-separated extension list), description, plus
+        the behavior flags (cwignore, cfignore, cpickup, recording,
+        ringing, alertinfo).
+        """
+        if not self.db_host:
+            return []
+        with self._db_cursor() as cur:
+            cur.execute(
+                "SELECT grpnum, strategy, grptime, grplist, description, "
+                "       alertinfo, ringing, cwignore, cfignore, cpickup, "
+                "       recording, progress, elsewhere, rvolume "
+                "FROM ringgroups ORDER BY grpnum"
+            )
+            cols = [c[0] for c in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
     def list_pickup_groups(self) -> list[dict]:
         """Fetch named pickup-group memberships.
 
