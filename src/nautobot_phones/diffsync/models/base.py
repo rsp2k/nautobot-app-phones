@@ -99,6 +99,78 @@ class DirectoryNumberModel(NautobotModel):
     vendor_extras: dict = {}
 
 
+class DIDAssignmentModel(GFKNautobotModel):
+    """DiffSync model for DIDAssignment — DID ↔ (DirectoryNumber | Trunk).
+
+    Operator-driven workflow only: source-side adapters do NOT emit
+    these. Customer ingest (ingest_sip_cut_sheet) creates DIDs; an
+    operator subsequently picks a target via the Nautobot UI. This
+    model represents that assignment for sync-side bookkeeping —
+    typically as a destination read so external systems can query
+    "where does DID X route?"
+
+    Identifier shape is just (did__e164,) because ``did`` is a
+    OneToOne FK on the ORM model. The target details are attributes
+    that can change if a DID is reassigned.
+
+    The two valid target kinds have different natural-key shapes:
+
+    * ``directorynumber``: identified by (phone_system, partition,
+      extension) — needs ``target_phone_system__name``,
+      ``target_partition__name``, and ``target_name`` (= extension).
+    * ``trunk``: identified by (phone_system, name) — needs only
+      ``target_phone_system__name`` and ``target_name``.
+
+    Hence the per-kind ``_gfk_lookups`` + ``_gfk_reads`` overrides:
+    the base-class default (lookup by ``name`` only) doesn't fit
+    DirectoryNumber.
+    """
+
+    _model = models.DIDAssignment
+    _modelname = "did_assignment"
+    _identifiers = ("did__e164",)
+    _attributes = (
+        "target_kind",
+        "target_name",
+        "target_partition__name",
+        "target_phone_system__name",
+    )
+
+    _gfk_targets = {
+        "directorynumber": ("nautobot_phones", "directorynumber"),
+        "trunk": ("nautobot_phones", "trunk"),
+    }
+    _gfk_lookups = {
+        "directorynumber": lambda name, params: {
+            "extension": name,
+            "partition__name": params.get("target_partition__name"),
+            "partition__phone_system__name": params.get("target_phone_system__name"),
+        },
+        "trunk": lambda name, params: {
+            "name": name,
+            "phone_system__name": params.get("target_phone_system__name"),
+        },
+    }
+    _gfk_reads = {
+        "directorynumber": lambda target: {
+            "target_name": target.extension,
+            "target_partition__name": target.partition.name,
+            "target_phone_system__name": target.partition.phone_system.name,
+        },
+        "trunk": lambda target: {
+            "target_name": target.name,
+            "target_partition__name": "",
+            "target_phone_system__name": target.phone_system.name,
+        },
+    }
+
+    did__e164: str
+    target_kind: str
+    target_name: str
+    target_partition__name: str = ""
+    target_phone_system__name: str
+
+
 class PhoneModel(NautobotModel):
     """DiffSync model for Phone.
 

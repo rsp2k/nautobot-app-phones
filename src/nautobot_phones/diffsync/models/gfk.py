@@ -32,13 +32,34 @@ Subclasses declare:
   ``phone_system__name=<value>`` to disambiguate names that aren't
   globally unique. ``None`` means the target's ``name`` field is
   globally unique (rare in practice).
+
+* ``_gfk_lookups``: optional ``{kind_string: callable(target_name,
+  parameters) -> dict}`` map for kinds whose natural key isn't a
+  simple ``name`` field. The callable returns the queryset filter
+  to apply (e.g. ``{"partition__name": "...", "extension": "..."}``
+  for DirectoryNumber). Kinds NOT in this map use the default
+  name-based lookup, optionally scoped by ``_gfk_scope_from``.
+
+* ``_gfk_reads``: complement to ``_gfk_lookups`` for the read path —
+  ``{kind_string: callable(target_obj) -> dict[virtual_field, value]}``
+  extracts the virtual-identifier values (e.g. ``target_name``,
+  ``target_partition__name``) from the ORM target object during
+  Nautobot-side adapter load. Kinds NOT in this map fall back to
+  ``{"target_name": target.name}``.
 """
 
-from typing import ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional
 
 from diffsync.exceptions import ObjectCrudException
 from django.contrib.contenttypes.models import ContentType
 from nautobot_ssot.contrib import NautobotModel
+
+# Type alias for the per-kind lookup signature: receives the
+# ``target_name`` identifier value plus the rest of the DiffSync
+# parameter dict (so the callable can pull e.g. ``target_partition__name``
+# out of the same record). Returns a queryset filter dict that
+# uniquely identifies the target ORM object.
+GFKLookupFunc = Callable[[str, dict], dict[str, Any]]
 
 
 class GFKNautobotModel(NautobotModel):
@@ -49,8 +70,49 @@ class GFKNautobotModel(NautobotModel):
     _gfk_targets: ClassVar[dict[str, tuple[str, str]]] = {}
 
     # Identifier field whose value scopes the GFK target queryset by
-    # ``phone_system__name``. ``None`` disables scoping.
+    # ``phone_system__name``. ``None`` disables scoping. Only consulted
+    # when the default name-based lookup is in use (i.e. the kind is
+    # not in ``_gfk_lookups``).
     _gfk_scope_from: ClassVar[Optional[str]] = None
+
+    # Optional per-kind lookup override for targets whose natural key
+    # isn't a single ``name`` field. Each callable receives
+    # (target_name, parameters) and returns a queryset filter dict.
+    # Kinds NOT in this map fall back to ``{"name": target_name}``
+    # scoped by ``_gfk_scope_from``.
+    _gfk_lookups: ClassVar[dict[str, GFKLookupFunc]] = {}
+
+    # Optional per-kind extractor for the read path. Each callable
+    # receives the ORM target object and returns a dict of virtual
+    # field values to populate on the DiffSync record. Kinds NOT in
+    # this map fall back to ``{"target_name": target.name}``.
+    _gfk_reads: ClassVar[dict[str, Callable[[Any], dict[str, Any]]]] = {}
+
+    @classmethod
+    def _extract_gfk_virtual_field(cls, database_object, parameter_name) -> Any:
+        """Compute the value of a virtual GFK field from the ORM object.
+
+        ``target_kind`` is always derived from the ContentType. Other
+        ``target_*`` fields are pulled from the per-kind extractor
+        registered in ``_gfk_reads`` — or, as a fallback, from
+        ``target.name`` (which covers the common case where the GFK
+        target's natural key IS its name field).
+
+        Returns an empty string for missing/unresolvable values to
+        keep DiffSync's diff stable; raising here would crash the
+        whole adapter load over one bad row.
+        """
+        if parameter_name == "target_kind":
+            return database_object.target_type.model
+        target = database_object.target
+        if target is None:
+            return ""
+        kind = database_object.target_type.model
+        if kind in cls._gfk_reads:
+            return cls._gfk_reads[kind](target).get(parameter_name, "")
+        if parameter_name == "target_name":
+            return getattr(target, "name", "")
+        return ""
 
     @classmethod
     def _update_obj_with_parameters(cls, obj, parameters, adapter):
@@ -99,11 +161,16 @@ class GFKNautobotModel(NautobotModel):
             ) from e
 
         target_model = ct.model_class()
-        lookup: dict = {"name": target_name}
-        if cls._gfk_scope_from:
-            scope_value = parameters.get(cls._gfk_scope_from)
-            if scope_value:
-                lookup["phone_system__name"] = scope_value
+        # Per-kind lookup override wins; otherwise default to name-based
+        # lookup, optionally scoped by ``_gfk_scope_from``.
+        if target_kind in cls._gfk_lookups:
+            lookup: dict = cls._gfk_lookups[target_kind](target_name, parameters)
+        else:
+            lookup = {"name": target_name}
+            if cls._gfk_scope_from:
+                scope_value = parameters.get(cls._gfk_scope_from)
+                if scope_value:
+                    lookup["phone_system__name"] = scope_value
 
         try:
             target = target_model.objects.get(**lookup)

@@ -18,6 +18,8 @@ identifier resolution — children reference parents by natural key.
 
 from nautobot_ssot.contrib import NautobotAdapter as ContribNautobotAdapter
 
+from nautobot_phones.diffsync.models.gfk import GFKNautobotModel
+
 from nautobot_phones.diffsync.models import (
     AnalogGatewayModel,
     AnalogPortModel,
@@ -27,6 +29,7 @@ from nautobot_phones.diffsync.models import (
     CallingSearchSpaceModel,
     CSSPartitionMembershipModel,
     DeviceProfileModel,
+    DIDAssignmentModel,
     DirectoryNumberModel,
     HuntListMemberModel,
     HuntListModel,
@@ -83,6 +86,10 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     hunt_pilot = HuntPilotModel
     call_pickup_group = CallPickupGroupModel
     call_pickup_group_member = CallPickupGroupMemberModel
+    # DIDAssignment uses a GFK that can point at DirectoryNumber OR Trunk;
+    # both must be loaded before this entry so the read-path GFK extractor
+    # can dereference target.partition.phone_system / target.phone_system.
+    did_assignment = DIDAssignmentModel
 
     top_level = (
         "phone_system",
@@ -121,6 +128,11 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         # Pickup group + members (DNs must already exist).
         "call_pickup_group",
         "call_pickup_group_member",
+        # DIDAssignment last — its GFK target can be a DN or Trunk, both
+        # already loaded above. The model is operator-driven (no source
+        # adapter emits these), so on a fresh sync this load just snapshots
+        # whatever the operator created.
+        "did_assignment",
     )
 
     # Models that only get populated by per-phone getPhone enrichment.
@@ -145,19 +157,24 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         """Special-case virtual GFK identifier fields before the framework
         tries ``_meta.get_field()`` on them.
 
-        ``target_kind`` and ``target_name`` aren't real ORM fields on
-        models like ``RouteGroupMember`` — they're derived from the GFK
-        pair (``target_type`` ContentType + ``target`` GenericForeignKey
-        instance). Without this short-circuit, the framework's default
-        path raises ``FieldDoesNotExist`` for them.
+        Virtual GFK fields (``target_kind``, ``target_name``, and for
+        DIDAssignment-style models also ``target_partition__name`` and
+        ``target_phone_system__name``) aren't real ORM fields — they're
+        derived from the GFK pair (``target_type`` ContentType +
+        ``target`` GenericForeignKey instance). Without this short-circuit
+        the framework's default path raises ``FieldDoesNotExist``.
+
+        Dispatch delegates to ``GFKNautobotModel._extract_gfk_virtual_field``,
+        which knows how to pull the right attribute off the target ORM
+        object based on the per-kind ``_gfk_reads`` extractor.
         """
-        if parameter_name == "target_kind":
-            # ContentType.model is the lowercase model name, e.g. "trunk".
-            parameters[parameter_name] = database_object.target_type.model
-            return
-        if parameter_name == "target_name":
-            target = database_object.target
-            parameters[parameter_name] = target.name if target is not None else ""
+        if parameter_name.startswith("target_") and (
+            isinstance(diffsync_model, type)
+            and issubclass(diffsync_model, GFKNautobotModel)
+        ):
+            parameters[parameter_name] = diffsync_model._extract_gfk_virtual_field(
+                database_object, parameter_name,
+            )
             return
         return super()._handle_single_parameter(
             parameters, parameter_name, database_object, diffsync_model,
