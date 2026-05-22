@@ -19,7 +19,7 @@ unit tests pass mocks).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from diffsync import Adapter
 
@@ -43,6 +43,7 @@ from nautobot_phones.diffsync.models import (
     PhoneModel,
     PhoneServiceUrlModel,
     PhoneSystemModel,
+    RouteGroupMemberModel,
     RouteGroupModel,
     RouteListMemberModel,
     RouteListModel,
@@ -108,6 +109,7 @@ class CUCMSourceAdapter(Adapter):
     route_list = RouteListModel
     route_group = RouteGroupModel
     route_list_member = RouteListMemberModel
+    route_group_member = RouteGroupMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -143,6 +145,9 @@ class CUCMSourceAdapter(Adapter):
         "translation_pattern",
         "analog_gateway",
         "analog_port",
+        # GFK through-table — Trunk AND AnalogGateway must already be loaded
+        # so the natural-key target resolution in the diffsync store finds them.
+        "route_group_member",
         "line_group",
         "hunt_list",
         "line_group_member",
@@ -250,12 +255,14 @@ class CUCMSourceAdapter(Adapter):
         self._load_trunks(ps.name)
         self._load_route_lists(ps.name)
         self._load_route_groups(ps.name)
-        # RouteGroupMember GFK through-table — currently a no-op stub.
-        # See _load_route_group_members docstring for the DiffSync GFK gap.
+        # Analog gateways MUST load before route_group_members so the
+        # GFK target lookup can disambiguate Trunk vs AnalogGateway.
+        self._load_gateways_and_ports(ps.name)
+        # GFK through-table — resolves device names against the
+        # already-loaded Trunk + AnalogGateway in-memory store.
         self._load_route_group_members(ps.name)
         self._load_route_patterns(ps.name)  # uses getRoutePattern for target resolution
         self._load_translation_patterns(ps.name)
-        self._load_gateways_and_ports(ps.name)
         self._load_hunt_subsystem(ps.name)
         # Pickup groups load after DNs so member-FK lookups resolve.
         self._load_call_pickup_groups(ps.name)
@@ -689,34 +696,75 @@ class CUCMSourceAdapter(Adapter):
                 ))
 
     def _load_route_group_members(self, ps_name: str) -> None:
-        """Emit RouteGroupMember rows (currently a no-op stub).
+        """Emit RouteGroupMember rows via getRouteGroup enrichment.
 
-        Deferred. RouteGroupMember has a GenericForeignKey target
-        (Trunk OR AnalogGateway) that ``nautobot_ssot.contrib.NautobotModel``
-        doesn't resolve through natural-key chains the way regular FKs do.
-        Implementing it requires:
+        Two-step pattern: ``listRouteGroup`` returns scalar fields only
+        (we already loaded those in ``_load_route_groups``); the device
+        membership lives in ``getRouteGroup.return.routeGroup.members.member[*]``
+        with ``deviceName`` (XFkType refs) and ``deviceSelectionOrder``.
 
-          1. A DiffSync model class with composite-identifier shape
-             ``(route_group__name, target_kind, target_name)`` where
-             ``target_kind`` ∈ {"trunk", "analoggateway"}.
-          2. Custom ``create``/``update`` overrides that look up the
-             matching ContentType + resolve target_id from the
-             target_name within the right model's queryset.
+        Each member references a device by name only — AXL doesn't tell
+        us whether it's a SIP Trunk or an Analog Gateway. We disambiguate
+        by looking up the device against our already-loaded in-memory
+        DiffSync store (which is why ``_load_gateways_and_ports`` and
+        ``_load_trunks`` MUST run before this loader). A device that
+        doesn't match either kind is silently skipped — likely a Phone
+        or CTI Route Point we don't model as a route-group member yet.
 
-        Real-world value is moderate: most CCM RouteGroups contain a
-        single Trunk, and operators can see that membership via the
-        Trunk detail page's reverse FK panel. Multi-device RouteGroups
-        (Trunk + AnalogGateway in one group) are uncommon, and the
-        priority info IS preserved on the Trunk side via vendor_extras.
-
-        Revisit when a customer needs the through-table for reporting
-        or for cross-vendor ring-group analogues, AND we have the
-        bandwidth to write the GFK-aware DiffSync model.
-
-        Caller is wired up so the load() pass-through reads cleanly;
-        method is a no-op until the DiffSync infrastructure lands.
+        Per-record ``getRouteGroup`` is ~50-100ms; typical clusters have
+        5-15 route groups so the total overhead is sub-second.
         """
-        return  # explicit no-op
+        for row in self.client.list_route_groups():
+            rg_name = _get(row, "name", "") or ""
+            if not rg_name:
+                continue
+            try:
+                full = self.client._service.getRouteGroup(name=rg_name)
+            except Exception:  # noqa: BLE001
+                continue
+            obj = _get(_get(full, "return"), "routeGroup")
+            members = _get(_get(obj, "members"), "member", []) or []
+            if not isinstance(members, list):
+                members = [members]
+            for m in members:
+                dn_ref = _get(m, "deviceName") or {}
+                if isinstance(dn_ref, dict):
+                    device_name = _get(dn_ref, "_value_1", "") or ""
+                else:
+                    device_name = str(dn_ref) if dn_ref else ""
+                if not device_name:
+                    continue
+                order = _get(m, "deviceSelectionOrder")
+                try:
+                    priority = int(order) if order not in (None, "") else 1
+                except (TypeError, ValueError):
+                    priority = 1
+                target_kind = self._resolve_route_group_target_kind(device_name, ps_name)
+                if target_kind is None:
+                    continue  # device not modeled as Trunk or AnalogGateway — skip
+                self.add(self.route_group_member(
+                    route_group__name=rg_name,
+                    route_group__phone_system__name=ps_name,
+                    target_kind=target_kind,
+                    target_name=device_name,
+                    priority=priority,
+                ))
+
+    def _resolve_route_group_target_kind(self, device_name: str, ps_name: str) -> Optional[str]:
+        """Identify whether a device is in our Trunk or AnalogGateway store.
+
+        Returns the GFK kind string (``"trunk"`` / ``"analoggateway"``)
+        or ``None`` if the device matches neither — meaning it's a kind
+        we don't currently model as a route-group target.
+        """
+        ids = {"name": device_name, "phone_system__name": ps_name}
+        for kind, model_key in (("trunk", "trunk"), ("analoggateway", "analog_gateway")):
+            try:
+                self.get(model_key, ids)
+                return kind
+            except Exception:  # noqa: BLE001 - diffsync.ObjectNotFound
+                continue
+        return None
 
     def _load_route_groups(self, ps_name: str) -> None:
         for row in self.client.list_route_groups():
@@ -751,6 +799,16 @@ class CUCMSourceAdapter(Adapter):
         # per typical cluster makes this ~30s. Patterns whose destination
         # resolves to neither a RouteList nor a Gateway are skipped (the
         # XOR check constraint requires exactly one target).
+        #
+        # On target_dn: the unified RoutePattern model has a third target
+        # slot (target_dn) used by FreePBX inbound-route adapters to
+        # capture "DID → extension" routing. CCM does NOT populate this:
+        # AXL routePattern.destination only ever resolves to a routeList
+        # or gateway. Empirical check against a 15.0 cluster (numplan
+        # joined to devicenumplanmap → device → typeclass, filtered to
+        # tkpatternusage=5 Route) returned 165/165 destinations as
+        # "Route List". DN-shaped routing in CCM goes through Translation
+        # Patterns or Hunt Pilots (separate models), not RoutePattern.
         for row in self.client.list_route_patterns():
             uuid = _get(row, "uuid")
             if not uuid:

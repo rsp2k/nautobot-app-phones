@@ -39,6 +39,7 @@ from nautobot_phones.diffsync.models import (
     PhoneModel,
     PhoneServiceUrlModel,
     PhoneSystemModel,
+    RouteGroupMemberModel,
     RouteGroupModel,
     RouteListMemberModel,
     RouteListModel,
@@ -95,6 +96,7 @@ class FreePBXSourceAdapter(Adapter):
     route_list = RouteListModel
     route_group = RouteGroupModel
     route_list_member = RouteListMemberModel
+    route_group_member = RouteGroupMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -130,6 +132,10 @@ class FreePBXSourceAdapter(Adapter):
         "translation_pattern",
         "analog_gateway",
         "analog_port",
+        # GFK through-table — emits one row per synthesized RouteGroup
+        # pointing at its underlying Trunk. Must follow both RouteGroup
+        # and Trunk loading so target resolution can find the Trunk.
+        "route_group_member",
         "line_group",
         "hunt_list",
         "line_group_member",
@@ -401,6 +407,16 @@ class FreePBXSourceAdapter(Adapter):
                         description=f"Synthesized for FreePBX trunk {trunk_name!r}",
                         distribution_algorithm="top_down",
                         vendor_extras={"synthesized_from": "freepbx_trunk"},
+                    ))
+                    # Pair the synthesized group with its single Trunk
+                    # member so the GFK through-table is queryable. One
+                    # member per group; CCM may have many, FreePBX always one.
+                    self.add(self.route_group_member(
+                        route_group__name=trunk_name,
+                        route_group__phone_system__name=ps_name,
+                        target_kind="trunk",
+                        target_name=trunk_name,
+                        priority=1,
                     ))
                     seen_groups.add(trunk_name)
                 # Emit the through-table row so the RouteList's RouteGroup

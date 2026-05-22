@@ -271,6 +271,17 @@ class TestLoadOutboundRoutes(SimpleTestCase):
         self.assertEqual([(m.route_group__name, m.priority) for m in members],
                          [("ITSP-1", 1), ("ITSP-Backup", 2)])
 
+    def test_route_group_member_emitted_per_trunk(self) -> None:
+        """Each synthesized RouteGroup gets a RouteGroupMember pointing at
+        its underlying Trunk (FreePBX = one-trunk-per-group). The GFK
+        target_kind is always 'trunk' on the FreePBX side."""
+        adapter = _run_adapter(self._mk_client())
+        rgms = sorted(adapter.get_all("route_group_member"), key=lambda m: m.target_name)
+        self.assertEqual(
+            [(m.route_group__name, m.target_kind, m.target_name) for m in rgms],
+            [("ITSP-1", "trunk", "ITSP-1"), ("ITSP-Backup", "trunk", "ITSP-Backup")],
+        )
+
     def test_route_patterns_target_the_route_list(self) -> None:
         """Each dial pattern emits a RoutePattern pointing at the parent RouteList."""
         adapter = _run_adapter(self._mk_client())

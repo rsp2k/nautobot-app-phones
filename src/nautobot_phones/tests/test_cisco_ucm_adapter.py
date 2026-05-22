@@ -51,6 +51,7 @@ def _make_minimal_client() -> Any:
     # zeep-style wrappers (``{"return": {<modelname>: {...}}}``).
     client._service = MagicMock()
     client._service.getRouteList = MagicMock(return_value={"return": {"routeList": None}})
+    client._service.getRouteGroup = MagicMock(return_value={"return": {"routeGroup": None}})
     client._service.getHuntList = MagicMock(return_value={"return": {"huntList": None}})
     client._service.getLineGroup = MagicMock(return_value={"return": {"lineGroup": None}})
     client._service.getGateway = MagicMock(return_value={"return": {"gateway": None}})
@@ -203,19 +204,161 @@ class TestLoadRouteListsThroughTable(SimpleTestCase):
 
 
 # ---------------------------------------------------------------------------
-# RouteGroupMember stub
+# RouteGroupMember GFK through-table emission
 # ---------------------------------------------------------------------------
 
 
-class TestLoadRouteGroupMembersStub(SimpleTestCase):
-    """``_load_route_group_members`` is intentionally a no-op until the
-    GFK-aware DiffSync model lands."""
+class TestLoadRouteGroupMembers(SimpleTestCase):
+    """``_load_route_group_members`` emits RouteGroupMember rows via getRouteGroup.
 
-    def test_no_records_emitted_with_empty_client(self) -> None:
-        """The stub method exists, is called by load(), and emits nothing."""
+    The GFK target_kind is disambiguated by looking up the device name
+    against the already-loaded Trunk + AnalogGateway DiffSync stores, so
+    tests need to seed those via the mocked client.
+    """
+
+    def _client_with_route_group(
+        self,
+        members: list[dict],
+        *,
+        trunks: list[str] | None = None,
+        gateways: list[str] | None = None,
+    ) -> Any:
+        """Seed listRouteGroup with one group, getRouteGroup with members,
+        and (optionally) trunks / analog gateways for kind disambiguation."""
         client = _make_minimal_client()
+        client.list_route_groups = MagicMock(return_value=[
+            {"name": "Group-A", "description": "", "distributionAlgorithm": "Top Down"},
+        ])
+        client._service.getRouteGroup = MagicMock(return_value={
+            "return": {"routeGroup": {
+                "name": "Group-A",
+                "members": {"member": members},
+            }}
+        })
+        if trunks:
+            client.list_sip_trunks = MagicMock(return_value=[
+                {"name": t, "destinations": {"destination": []}} for t in trunks
+            ])
+        if gateways:
+            # listGateway uses `domainName` not `name` — caught a real
+            # adapter quirk when this test was first authored.
+            client.list_gateways = MagicMock(return_value=[
+                {"domainName": g, "product": "VG224", "protocol": "MGCP"} for g in gateways
+            ])
+        return client
+
+    def test_trunk_target_emits_rgm_with_trunk_kind(self) -> None:
+        """A device matching an already-loaded Trunk gets kind='trunk'."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": {"_value_1": "SIP-TRK-1"}, "deviceSelectionOrder": 1},
+            ],
+            trunks=["SIP-TRK-1"],
+        )
         adapter = _run_adapter(client)
-        # We don't even register a route_group_member DiffSync class on
-        # the source adapter yet — so asserting via get_all would raise.
-        # Instead, assert the stub method itself returns None cleanly.
-        self.assertIsNone(adapter._load_route_group_members("LAB-CCM"))
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(len(rgms), 1)
+        self.assertEqual(rgms[0].target_kind, "trunk")
+        self.assertEqual(rgms[0].target_name, "SIP-TRK-1")
+        self.assertEqual(rgms[0].priority, 1)
+        self.assertEqual(rgms[0].route_group__name, "Group-A")
+
+    def test_analog_gateway_target_emits_rgm_with_analoggateway_kind(self) -> None:
+        """A device matching an AnalogGateway gets kind='analoggateway'."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": {"_value_1": "VG224-LAB"}, "deviceSelectionOrder": 2},
+            ],
+            gateways=["VG224-LAB"],
+        )
+        adapter = _run_adapter(client)
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(len(rgms), 1)
+        self.assertEqual(rgms[0].target_kind, "analoggateway")
+        self.assertEqual(rgms[0].target_name, "VG224-LAB")
+
+    def test_mixed_membership_emits_both_kinds(self) -> None:
+        """A single RouteGroup can contain a Trunk + an AnalogGateway."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": {"_value_1": "SIP-PRIMARY"}, "deviceSelectionOrder": 1},
+                {"deviceName": {"_value_1": "VG-FAILOVER"}, "deviceSelectionOrder": 2},
+            ],
+            trunks=["SIP-PRIMARY"],
+            gateways=["VG-FAILOVER"],
+        )
+        adapter = _run_adapter(client)
+        rgms = sorted(adapter.get_all("route_group_member"), key=lambda r: r.priority)
+        self.assertEqual(
+            [(r.target_kind, r.target_name, r.priority) for r in rgms],
+            [("trunk", "SIP-PRIMARY", 1), ("analoggateway", "VG-FAILOVER", 2)],
+        )
+
+    def test_unknown_device_kind_is_silently_skipped(self) -> None:
+        """A device name that matches neither a Trunk nor an AnalogGateway
+        is dropped — likely a Phone or CTI Route Point we don't model
+        as a route-group target."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": {"_value_1": "UNKNOWN-DEV"}, "deviceSelectionOrder": 1},
+                {"deviceName": {"_value_1": "REAL-TRUNK"}, "deviceSelectionOrder": 2},
+            ],
+            trunks=["REAL-TRUNK"],
+        )
+        adapter = _run_adapter(client)
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(len(rgms), 1)
+        self.assertEqual(rgms[0].target_name, "REAL-TRUNK")
+
+    def test_get_route_group_failure_drops_only_membership(self) -> None:
+        """A failed getRouteGroup leaves the RouteGroup itself in place —
+        but emits no RouteGroupMember rows for that group."""
+        client = self._client_with_route_group(members=[], trunks=["T"])
+        client._service.getRouteGroup = MagicMock(side_effect=Exception("AXL down"))
+        adapter = _run_adapter(client)
+        self.assertEqual(len(list(adapter.get_all("route_group"))), 1)
+        self.assertEqual(len(list(adapter.get_all("route_group_member"))), 0)
+
+    def test_single_member_not_in_list_is_normalized(self) -> None:
+        """zeep quirk: 1-element collections come back as scalars instead
+        of lists — loader normalizes."""
+        client = self._client_with_route_group(members=[], trunks=["LONELY-TRK"])
+        client._service.getRouteGroup = MagicMock(return_value={
+            "return": {"routeGroup": {
+                "name": "Group-A",
+                "members": {"member": {
+                    "deviceName": {"_value_1": "LONELY-TRK"},
+                    "deviceSelectionOrder": 1,
+                }},
+            }}
+        })
+        adapter = _run_adapter(client)
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(len(rgms), 1)
+        self.assertEqual(rgms[0].target_name, "LONELY-TRK")
+
+    def test_non_int_selection_order_falls_back_to_1(self) -> None:
+        """deviceSelectionOrder as a non-int string defaults to priority 1."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": {"_value_1": "T1"}, "deviceSelectionOrder": "garbage"},
+            ],
+            trunks=["T1"],
+        )
+        adapter = _run_adapter(client)
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(rgms[0].priority, 1)
+
+    def test_missing_device_name_skipped(self) -> None:
+        """Member with a null deviceName ref doesn't crash the loader."""
+        client = self._client_with_route_group(
+            members=[
+                {"deviceName": None, "deviceSelectionOrder": 1},
+                {"deviceName": {"_value_1": "VALID-T"}, "deviceSelectionOrder": 2},
+            ],
+            trunks=["VALID-T"],
+        )
+        adapter = _run_adapter(client)
+        rgms = list(adapter.get_all("route_group_member"))
+        self.assertEqual(len(rgms), 1)
+        self.assertEqual(rgms[0].target_name, "VALID-T")

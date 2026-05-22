@@ -38,6 +38,7 @@ from nautobot_phones.diffsync.models import (
     PhoneModel,
     PhoneServiceUrlModel,
     PhoneSystemModel,
+    RouteGroupMemberModel,
     RouteGroupModel,
     RouteListMemberModel,
     RouteListModel,
@@ -70,6 +71,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     route_list = RouteListModel
     route_group = RouteGroupModel
     route_list_member = RouteListMemberModel
+    route_group_member = RouteGroupMemberModel
     route_pattern = RoutePatternModel
     translation_pattern = TranslationPatternModel
     analog_gateway = AnalogGatewayModel
@@ -100,12 +102,15 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         "trunk",
         "route_list",
         "route_group",
-        # Through-table comes after both parents are loaded.
+        # Through-tables come after both parents are loaded.
         "route_list_member",
         "route_pattern",
         "translation_pattern",
         "analog_gateway",
         "analog_port",
+        # GFK through-table — must follow both target kinds (trunk +
+        # analog_gateway) so create-time natural-key resolution succeeds.
+        "route_group_member",
         # Hunt subsystem — order: groups first (referenced by lists),
         # lists next (referenced by pilots), members last.
         "line_group",
@@ -135,3 +140,25 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         super().__init__(*args, **kwargs)
         if not include_lines:
             self.top_level = tuple(t for t in self.top_level if t not in self._BUTTON_MODELS)
+
+    def _handle_single_parameter(self, parameters, parameter_name, database_object, diffsync_model):
+        """Special-case virtual GFK identifier fields before the framework
+        tries ``_meta.get_field()`` on them.
+
+        ``target_kind`` and ``target_name`` aren't real ORM fields on
+        models like ``RouteGroupMember`` — they're derived from the GFK
+        pair (``target_type`` ContentType + ``target`` GenericForeignKey
+        instance). Without this short-circuit, the framework's default
+        path raises ``FieldDoesNotExist`` for them.
+        """
+        if parameter_name == "target_kind":
+            # ContentType.model is the lowercase model name, e.g. "trunk".
+            parameters[parameter_name] = database_object.target_type.model
+            return
+        if parameter_name == "target_name":
+            target = database_object.target
+            parameters[parameter_name] = target.name if target is not None else ""
+            return
+        return super()._handle_single_parameter(
+            parameters, parameter_name, database_object, diffsync_model,
+        )

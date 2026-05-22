@@ -21,6 +21,7 @@ from nautobot_ssot.contrib import NautobotModel
 from pydantic import field_validator
 
 from nautobot_phones import models
+from nautobot_phones.diffsync.models.gfk import GFKNautobotModel
 
 
 class PhoneSystemModel(NautobotModel):
@@ -283,6 +284,41 @@ class RouteGroupModel(NautobotModel):
     distribution_algorithm: str = "top_down"
     description: str = ""
     vendor_extras: dict = {}
+
+
+class RouteGroupMemberModel(GFKNautobotModel):
+    """DiffSync through-table — RouteGroup ↔ (Trunk | AnalogGateway) with priority.
+
+    The ORM model uses a GenericForeignKey for ``target`` so a single
+    RouteGroup can mix Trunks and AnalogGateways without a per-target
+    join table. DiffSync identifies a member by (route_group, target_kind,
+    target_name) — the parent route_group pins the phone_system scope,
+    so target_name only needs to be unique within that scope (which the
+    underlying ``unique_together = (phone_system, name)`` on both target
+    models guarantees).
+    """
+
+    _model = models.RouteGroupMember
+    _modelname = "route_group_member"
+    _identifiers = (
+        "route_group__name",
+        "route_group__phone_system__name",
+        "target_kind",
+        "target_name",
+    )
+    _attributes = ("priority",)
+
+    _gfk_targets = {
+        "trunk": ("nautobot_phones", "trunk"),
+        "analoggateway": ("nautobot_phones", "analoggateway"),
+    }
+    _gfk_scope_from = "route_group__phone_system__name"
+
+    route_group__name: str
+    route_group__phone_system__name: str
+    target_kind: str
+    target_name: str
+    priority: int = 0
 
 
 class RouteListMemberModel(NautobotModel):
