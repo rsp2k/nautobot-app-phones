@@ -97,3 +97,58 @@ because CCM IS the source.
 
 This is the reverse of the sibling Hudu plugin (which uses DataTarget
 because Hudu is the destination for Nautobot data).
+
+## ADR-009: GFK-aware DiffSync base class
+
+Some through-tables in our schema use a `GenericForeignKey` so a single
+row can target multiple model types:
+
+- `RouteGroupMember.target` — `Trunk` OR `AnalogGateway`
+- `DIDAssignment.target` — `DirectoryNumber` OR `Trunk` (future: also Voicemail)
+
+`nautobot_ssot.contrib.NautobotModel` resolves regular FKs through
+natural-key chains (`trunk__name` → `Trunk.objects.get(name=...)`)
+but doesn't know how to walk a GFK: the `(target_type, target_id)` pair
+has no schema-level link to a single related model class.
+
+**Solution**: `GFKNautobotModel` (in `diffsync/models/gfk.py`) overrides
+two extension points in the framework:
+
+1. **Write path** — `_update_obj_with_parameters` pops virtual identifier
+   fields (`target_kind`, `target_name`, optionally
+   `target_partition__name` / `target_phone_system__name`), resolves
+   them to `(ContentType, target_id)` via a per-kind queryset lookup,
+   sets them on the ORM instance, then delegates the rest of the FK
+   machinery + `validated_save()` to super.
+
+2. **Read path** — the Nautobot adapter's `_handle_single_parameter`
+   override short-circuits virtual `target_*` field names BEFORE the
+   framework calls `_meta.get_field()` on them (which would raise
+   `FieldDoesNotExist`). Extraction logic lives in
+   `GFKNautobotModel._extract_gfk_virtual_field`, which dispatches
+   on `target_type.model` to per-kind reader callables.
+
+**Per-kind configuration** (set on each concrete subclass):
+
+| Attribute | Purpose |
+|-----------|---------|
+| `_gfk_targets` | `{kind: (app_label, model_name)}` — ContentType resolution |
+| `_gfk_scope_from` | Identifier field whose value scopes default `name`-based lookups by `phone_system__name` |
+| `_gfk_lookups` | `{kind: callable(target_name, parameters) -> filter_dict}` — for kinds whose natural key isn't `name` (e.g. DirectoryNumber's composite `extension`/`partition`/`phone_system`) |
+| `_gfk_reads` | `{kind: callable(target_obj) -> {virtual_field: value}}` — complement of `_gfk_lookups` for the read path |
+
+**Why**: A custom DiffSync model class for each GFK would force every
+contributor to re-derive the same ContentType + dispatch logic. Encoding
+it once in a base class means new GFK models declare *what* their target
+kinds are and *how* each kind's natural key resolves, but never have to
+override `create`/`update`/`delete`/`get_from_db`.
+
+**Tradeoff**: Virtual identifier fields (`target_kind`, `target_name`,
+etc.) don't appear on the ORM model — they're computed on demand. They
+ARE filterable through the DiffSync representation but not directly via
+Django ORM queries. For UI/REST filtering on a GFK target's name, use
+the ORM-side `ContentType` filter (`target_type__model="trunk"`) plus
+a join through `target_id`.
+
+See `diffsync/models/gfk.py` for the implementation and
+`tests/test_diffsync_gfk.py` for the contract.

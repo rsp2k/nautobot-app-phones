@@ -55,6 +55,73 @@ Update `_RIS_STATUS_REASONS` in `src/nautobot_phones/views.py`. The dict
 is also used by `_status_reason_human` — the `test_all_documented_codes_resolve`
 test verifies the lookup table stays internally consistent.
 
+## Adding a GFK through-table model
+
+When a relationship's target can be multiple unrelated model types
+(like `RouteGroupMember.target` accepting Trunk or AnalogGateway), the
+ORM uses a `GenericForeignKey`. The DiffSync side needs special handling
+because `nautobot_ssot.contrib.NautobotModel` can't walk a GFK through
+natural-key chains. See [ADR-009](architecture.md#adr-009-gfk-aware-diffsync-base-class)
+for the rationale.
+
+To wire a new GFK model into DiffSync:
+
+1. **ORM side** — define your model with `target_type` (FK to
+   ContentType, constrained via `limit_choices_to`), `target_id`
+   (UUIDField), and `target = GenericForeignKey("target_type",
+   "target_id")`.
+
+2. **DiffSync subclass** — extend `GFKNautobotModel` (from
+   `diffsync/models/gfk.py`), not `NautobotModel`. Declare:
+
+    ```python
+    class MyMemberModel(GFKNautobotModel):
+        _model = models.MyMember
+        _modelname = "my_member"
+        _identifiers = ("parent__name", "target_kind", "target_name")
+        _attributes = ("priority",)
+
+        # Required: which ContentType each kind resolves to.
+        _gfk_targets = {
+            "trunk": ("nautobot_phones", "trunk"),
+            "analoggateway": ("nautobot_phones", "analoggateway"),
+        }
+        # Optional: phone_system-scope the default name-based lookup.
+        _gfk_scope_from = "parent__phone_system__name"
+
+        # Optional: per-kind composite lookup (for natural keys other than ``name``).
+        _gfk_lookups = {
+            "directorynumber": lambda name, params: {
+                "extension": name,
+                "partition__name": params["target_partition__name"],
+                "partition__phone_system__name": params["target_phone_system__name"],
+            },
+        }
+        # Optional: per-kind read extractor (mirrors _gfk_lookups).
+        _gfk_reads = {
+            "directorynumber": lambda target: {
+                "target_name": target.extension,
+                "target_partition__name": target.partition.name,
+                "target_phone_system__name": target.partition.phone_system.name,
+            },
+        }
+    ```
+
+3. **Register** in `diffsync/models/__init__.py` and on the source +
+   destination adapters (`class attr + top_level` entry). The
+   `top_level` entry MUST come AFTER all target model entries — your
+   GFK target lookup walks the in-memory store at create time.
+
+4. **Source adapter loader** — emit GFK rows by setting `target_kind`
+   and `target_name` (plus any extra composite-key fields). Use
+   `self.get(<model>, {"name": ..., "phone_system__name": ...})` to
+   disambiguate target kinds when the source only gives you a name.
+
+5. **Tests** — add focused tests in `test_diffsync_gfk.py` for:
+    - The lookup callable shape (`_gfk_lookups[kind](...) == {...}`)
+    - The read callable shape (`_gfk_reads[kind](mock_obj) == {...}`)
+    - End-to-end through the adapter (loader emits the right rows)
+
 ## Adding voice port types (e.g. RJ-45 for T1, BRI)
 
 Two CustomFields drive port semantics: `voice_function` and
