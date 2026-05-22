@@ -10,7 +10,7 @@
     </div>
     <div class="dh-summary-card">
       <div class="dh-summary-label">Concurrent capacity</div>
-      <div class="dh-summary-value">{{ object.sip_sessions }} <span class="dh-summary-unit">SIP sessions</span></div>
+      <div class="dh-summary-value">{{ profile.sip_sessions }} <span class="dh-summary-unit">SIP sessions</span></div>
       <div class="dh-summary-sub">Every call in or out of the site shares this ceiling.</div>
     </div>
     <div class="dh-summary-card">
@@ -23,8 +23,8 @@
     </div>
     <div class="dh-summary-card">
       <div class="dh-summary-label">Source</div>
-      <div class="dh-summary-value dh-summary-source">{{ object.source_doc|default:"—" }}</div>
-      <div class="dh-summary-sub">{{ object.cut_sheet_received_date|date:"Y-m-d"|default:"date unknown" }}</div>
+      <div class="dh-summary-value dh-summary-source">{{ profile.source_doc|default:"—" }}</div>
+      <div class="dh-summary-sub">{{ profile.cut_sheet_received_date|date:"Y-m-d"|default:"date unknown" }}</div>
     </div>
   </div>
 

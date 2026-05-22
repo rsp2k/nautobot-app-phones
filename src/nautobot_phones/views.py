@@ -36,10 +36,17 @@ class DIDHeatmapPanel(Panel):
     body_content_template_path = "nautobot_phones/inc/did_heatmap.html"
 
     def get_extra_context(self, context):
-        """Add ``heatmap`` to the panel-rendering context."""
+        """Add ``heatmap`` + ``profile`` to the panel-rendering context.
+
+        The template uses ``profile.X`` (not ``object.X``) so the same
+        template can render whether the page-level ``object`` is a
+        SipCircuitProfile or a Circuit — the resolving logic differs
+        between parents, but the template stays single-source.
+        """
         ctx = super().get_extra_context(context) if hasattr(super(), "get_extra_context") else {}
         obj = context.get("object")
         if obj is not None:
+            ctx["profile"] = obj
             ctx["heatmap"] = build_heatmap_data(obj)
         return ctx
 

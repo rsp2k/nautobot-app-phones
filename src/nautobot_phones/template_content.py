@@ -16,11 +16,61 @@ matched against the convention `nautobot_phones.template_content`.
 from nautobot.apps.ui import (
     KeyValueTablePanel,
     ObjectsTablePanel,
+    Panel,
     SectionChoices,
     TemplateExtension,
 )
 
 from nautobot_phones import tables
+from nautobot_phones.heatmap import build_heatmap_data
+
+
+def _circuit_sip_profile(circuit):
+    """Return the SipCircuitProfile for a circuit, or None if it has no SIP profile.
+
+    The reverse OneToOne raises ``SipCircuitProfile.DoesNotExist`` when no
+    profile exists for the circuit. Catch it and return None so callers
+    can use a simple truthiness check.
+    """
+    if circuit is None:
+        return None
+    try:
+        return circuit.sip_profile
+    except Exception:  # pragma: no cover - DoesNotExist subclass varies by Django version
+        return None
+
+
+class CircuitDIDHeatmapPanel(Panel):
+    """DID inventory heatmap, surfaced on the core circuits.Circuit detail page.
+
+    Only renders when the Circuit has a [SipCircuitProfile][profile] attached —
+    i.e. when the Circuit represents a SIP trunk. Non-SIP circuits (Internet
+    transit, MPLS, cross-connects, etc.) keep the existing core detail layout
+    unchanged.
+
+    [profile]: ../../models/sipcircuitprofile/
+    """
+
+    label = "DID Heatmap"
+    body_content_template_path = "nautobot_phones/inc/did_heatmap.html"
+
+    def get_extra_context(self, context):
+        """Resolve circuit → profile → heatmap data."""
+        ctx = super().get_extra_context(context) if hasattr(super(), "get_extra_context") else {}
+        profile = _circuit_sip_profile(context.get("object"))
+        if profile is not None:
+            ctx["profile"] = profile
+            ctx["heatmap"] = build_heatmap_data(profile)
+        return ctx
+
+    def render_body_content(self, context):
+        """Merge heatmap data into context, then delegate to the template path."""
+        context.update(self.get_extra_context(context))
+        return super().render_body_content(context)
+
+    def should_render(self, context):
+        """Skip the panel entirely when the Circuit isn't a SIP trunk."""
+        return _circuit_sip_profile(context.get("object")) is not None
 
 
 class VendorExtrasPanel(KeyValueTablePanel):
@@ -105,6 +155,12 @@ class CircuitExtension(TemplateExtension):
             table_class=tables.TrunkTable, table_filter="circuit",
             table_title="PBX Trunks Terminating this Circuit",
             exclude_columns=["circuit"],
+        ),
+        # Full-width DID heatmap below the per-table panels. Only renders
+        # for circuits that have a SipCircuitProfile attached (i.e. SIP
+        # trunks); see CircuitDIDHeatmapPanel.should_render.
+        CircuitDIDHeatmapPanel(
+            section=SectionChoices.FULL_WIDTH, weight=800,
         ),
     )
 
