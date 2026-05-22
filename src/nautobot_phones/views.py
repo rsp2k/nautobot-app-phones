@@ -384,6 +384,38 @@ class DIDUIViewSet(NautobotUIViewSet):
     )
 
 
+class DIDAssignmentUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for DIDAssignment.
+
+    DIDAssignment is the operator-driven join between a DID and its
+    routing target (DirectoryNumber or Trunk). No source-side adapter
+    populates this — assignments are created here, in the Nautobot UI,
+    after DID ingest.
+
+    The detail page renders three blocks of context: the DID record,
+    the resolved target (with a link to its detail page), and the
+    timestamp of when the assignment was made.
+    """
+
+    queryset = models.DIDAssignment.objects.all()
+    table_class = tables.DIDAssignmentTable
+    filterset_class = filters.DIDAssignmentFilterSet
+    filterset_form_class = forms.DIDAssignmentFilterForm
+    form_class = forms.DIDAssignmentForm
+    serializer_class = None
+    lookup_field = "pk"
+
+    object_detail_content = ObjectDetailContent(
+        panels=(
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=100,
+                label="Assignment",
+                fields=["did", "target_type", "target", "assigned_at"],
+            ),
+        ),
+    )
+
+
 class PhoneUIViewSet(NautobotUIViewSet):
     """CRUD viewset for Phone."""
 

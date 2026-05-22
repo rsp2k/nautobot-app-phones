@@ -67,6 +67,11 @@ menu_items = (
                         name="DIDs",
                         permissions=["nautobot_phones.view_did"],
                     ),
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:didassignment_list",
+                        name="DID Assignments",
+                        permissions=["nautobot_phones.view_didassignment"],
+                    ),
                 ),
             ),
             NavMenuGroup(

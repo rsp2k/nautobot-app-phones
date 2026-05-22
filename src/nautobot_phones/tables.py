@@ -439,16 +439,39 @@ class CSSPartitionMembershipTable(BaseTable):
 
 
 class DIDAssignmentTable(BaseTable):
-    """DID assignments embedded on DID, DN, or Trunk detail."""
+    """DID assignments — full list view + nested view on DID/DN/Trunk detail.
 
+    The ``target`` column resolves the GenericForeignKey to a clickable
+    link to whichever target (DirectoryNumber or Trunk) it points at;
+    ``target_type`` shows the model-name label for filterability.
+    """
+
+    pk = ToggleColumn()
     did = tables.LinkColumn()
-    target_type = tables.Column(verbose_name="Target Type")
+    target_type = tables.Column(verbose_name="Target Type", accessor="target_type.model")
+    target = tables.Column(
+        verbose_name="Target",
+        empty_values=(),  # never treat as empty — always call render_target
+        orderable=False,
+    )
     assigned_at = tables.DateTimeColumn()
+    actions = ButtonsColumn(models.DIDAssignment)
 
     class Meta(BaseTable.Meta):
         model = models.DIDAssignment
-        fields = ("did", "target_type", "assigned_at")
-        default_columns = ("did", "target_type", "assigned_at")
+        fields = ("pk", "did", "target_type", "target", "assigned_at", "actions")
+        default_columns = ("did", "target_type", "target", "assigned_at", "actions")
+
+    def render_target(self, record):
+        """Render a clickable link to the actual GFK target."""
+        from django.utils.html import format_html
+        target = record.target
+        if target is None:
+            return "—"
+        url = getattr(target, "get_absolute_url", lambda: None)()
+        if url:
+            return format_html('<a href="{}">{}</a>', url, target)
+        return str(target)
 
 
 # --------------------------------------------------------------------------

@@ -69,6 +69,19 @@ class DIDFilterSet(NautobotFilterSet):
         fields = ["e164", "block", "circuit", "is_special"]
 
 
+class DIDAssignmentFilterSet(NautobotFilterSet):
+    """Filter set for DIDAssignment list view.
+
+    Operators typically filter by ``target_type`` (which target model
+    this assignment points at — DirectoryNumber or Trunk) plus
+    ``did`` to find the specific number's assignment.
+    """
+
+    class Meta:
+        model = models.DIDAssignment
+        fields = ["did", "target_type"]
+
+
 class PhoneFilterSet(NautobotFilterSet):
     """Filter set for Phone list view."""
 

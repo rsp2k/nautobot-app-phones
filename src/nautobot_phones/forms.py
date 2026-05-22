@@ -169,6 +169,99 @@ class DIDFilterForm(NautobotFilterForm):
 
 
 # --------------------------------------------------------------------------
+# DIDAssignment — GenericForeignKey target needs custom form handling
+# --------------------------------------------------------------------------
+class DIDAssignmentForm(forms.ModelForm):
+    """Create/edit form for DIDAssignment.
+
+    Uses plain ``forms.ModelForm`` (not ``NautobotModelForm``) because
+    DIDAssignment subclasses ``BaseModel``, not ``PrimaryModel`` —
+    so it doesn't have ``get_relationships()`` / ``cf`` / ``tags``
+    surface that the Nautobot mixins assume. The model is a join,
+    not a primary entity; the lighter form base fits.
+
+    The ORM stores the target via a GenericForeignKey
+    (``target_type`` + ``target_id``). A raw form on those fields would
+    show a ContentType dropdown plus a UUID text input — accurate but
+    unfriendly. Instead, expose two optional FK fields and validate
+    XOR: exactly one of (target_directorynumber, target_trunk) must
+    be set. On save, derive ``target_type`` + ``target_id`` from the
+    populated field.
+
+    Future kinds (e.g. Voicemail target) extend by adding another
+    optional FK field + an entry in the XOR check + the save
+    dispatch.
+    """
+
+    target_directorynumber = forms.ModelChoiceField(
+        queryset=models.DirectoryNumber.objects.all(),
+        required=False,
+        label="Target Directory Number",
+        help_text="If this DID rings an extension, pick the Directory Number here.",
+    )
+    target_trunk = forms.ModelChoiceField(
+        queryset=models.Trunk.objects.all(),
+        required=False,
+        label="Target Trunk",
+        help_text="If this DID is owned by a downstream PBX reached over a trunk, "
+                  "pick that trunk here.",
+    )
+
+    class Meta:
+        model = models.DIDAssignment
+        # ``target_type`` and ``target_id`` are set in save() from the
+        # two optional FK fields above; we don't expose them directly.
+        fields = ("did",)
+
+    def __init__(self, *args, **kwargs):
+        """Pre-populate the appropriate target field when editing."""
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.target:
+            target = self.instance.target
+            if isinstance(target, models.DirectoryNumber):
+                self.fields["target_directorynumber"].initial = target.pk
+            elif isinstance(target, models.Trunk):
+                self.fields["target_trunk"].initial = target.pk
+
+    def clean(self):
+        """Enforce: exactly one target FK is set."""
+        cleaned = super().clean()
+        dn = cleaned.get("target_directorynumber")
+        trunk = cleaned.get("target_trunk")
+        if not dn and not trunk:
+            raise forms.ValidationError(
+                "Pick exactly one target: a Directory Number OR a Trunk.",
+            )
+        if dn and trunk:
+            raise forms.ValidationError(
+                "Pick only one target — both a Directory Number and a Trunk "
+                "were selected.",
+            )
+        return cleaned
+
+    def save(self, commit=True):
+        """Resolve the chosen target to (target_type, target_id) before save."""
+        from django.contrib.contenttypes.models import ContentType
+        target_obj = (
+            self.cleaned_data.get("target_directorynumber")
+            or self.cleaned_data.get("target_trunk")
+        )
+        self.instance.target_type = ContentType.objects.get_for_model(target_obj)
+        self.instance.target_id = target_obj.pk
+        return super().save(commit=commit)
+
+
+class DIDAssignmentFilterForm(NautobotFilterForm):
+    """Filter sidebar form for DIDAssignment list view."""
+
+    model = models.DIDAssignment
+    field_order = ("q", "did", "target_type")
+    q = forms.CharField(required=False, label="Search")
+    # target_type is rendered as a ContentType picker constrained to
+    # the same limit_choices_to as the model field (DN or Trunk).
+
+
+# --------------------------------------------------------------------------
 # Phone
 # --------------------------------------------------------------------------
 class PhoneForm(NautobotModelForm):
