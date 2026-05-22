@@ -121,6 +121,8 @@ nav:
     - "Getting Started": "user/app_getting_started.md"
     - "Use Cases": "user/use_cases.md"
     - "Sync Reference": "user/sync_reference.md"
+    - "SIP Cut Sheet Ingest": "user/cut_sheet_ingest.md"
+    - "DID Heatmap": "user/did_heatmap.md"
     - "Models": "user/models.md"
     - "External Interactions": "user/external_interactions.md"
     - "FAQ": "user/faq.md"
@@ -128,7 +130,7 @@ nav:
     - "Index": "models/index.md"
     - "System":
       - "PhoneSystem": "models/phonesystem.md"
-      - "Carrier": "models/carrier.md"
+      - "SipCircuitProfile": "models/sipcircuitprofile.md"
     - "Dial plan":
       - "Partition": "models/partition.md"
       - "CallingSearchSpace": "models/callingsearchspace.md"

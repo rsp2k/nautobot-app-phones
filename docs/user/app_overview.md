@@ -16,7 +16,7 @@ The app pulls data from a CCM cluster's **AXL SOAP API** (configuration) and
 - `DIDBlock` — E.164 ranges (start/end same-prefix same-length)
 - `DID` — individual DIDs materialized on assignment
 - `DIDAssignment` — generic FK linking a DID to a DN/Trunk/voicemail target
-- `Carrier` — telecom provider per DIDBlock
+- `SipCircuitProfile` — SIP-specific extension on Nautobot's built-in `circuits.Circuit` (concurrent sessions, pilot DID, OLI/CLID policy, cut-sheet provenance). The underlying carrier is Nautobot's `circuits.Provider`.
 
 ### Endpoints
 - `Phone` — every CCM phone-class device. Eight `device_kind` values:

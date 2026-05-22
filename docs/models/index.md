@@ -6,7 +6,7 @@ and vendor-specific data conventions for one Nautobot model.
 ## System
 
 - [PhoneSystem](phonesystem.md) — cluster root; one record per CCM cluster or FreePBX install
-- [Carrier](carrier.md) — telecom provider record (parent of DIDBlock)
+- [SipCircuitProfile](sipcircuitprofile.md) — SIP-specific extension on `circuits.Circuit` (sessions, pilot, OLI/CLID policy, cut-sheet metadata)
 
 ## Dial plan
 
@@ -17,8 +17,8 @@ and vendor-specific data conventions for one Nautobot model.
 ## Numbers
 
 - [DirectoryNumber](directorynumber.md) — extension within a partition
-- [DIDBlock](didblock.md) — E.164 number ranges purchased from a carrier
-- [DID](did.md) — individual E.164 number; materialized only on assignment
+- [DIDBlock](didblock.md) — E.164 number ranges delivered by a `circuits.Provider`, optionally attached to a specific `circuits.Circuit`
+- [DID](did.md) — individual E.164 number; materialized on assignment or for sparse one-offs not in any block
 - [DIDAssignment](didassignment.md) — links a DID to a target (DN, Trunk, future voicemail)
 
 ## Endpoints
