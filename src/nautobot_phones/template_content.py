@@ -4,11 +4,23 @@ Adds a 'Vendor Extras' KeyValueTablePanel to the detail views of models
 that carry the `vendor_extras` JSONField — DirectoryNumber, Phone, Trunk,
 AnalogGateway. The panel renders the JSON as a clean two-column table.
 
+Also injects DID-inventory panels onto core ``circuits.Circuit`` detail
+pages — so an operator viewing a SIP trunk circuit sees the DID blocks
+and individual DIDs that ride over it, without having to navigate away
+to our DID-blocks / DIDs list views.
+
 Discovered by Nautobot via the module-level `template_extensions` list,
 matched against the convention `nautobot_phones.template_content`.
 """
 
-from nautobot.apps.ui import KeyValueTablePanel, TemplateExtension
+from nautobot.apps.ui import (
+    KeyValueTablePanel,
+    ObjectsTablePanel,
+    SectionChoices,
+    TemplateExtension,
+)
+
+from nautobot_phones import tables
 
 
 class VendorExtrasPanel(KeyValueTablePanel):
@@ -63,9 +75,44 @@ class AnalogGatewayExtension(_VendorExtrasMixin, TemplateExtension):
     model = "nautobot_phones.analoggateway"
 
 
+class CircuitExtension(TemplateExtension):
+    """Inject DID inventory + PBX-trunk panels into the core Circuit detail page.
+
+    Operators viewing a SIP carrier circuit naturally ask "what DIDs does
+    this trunk deliver?" and "which PBX-side Trunks terminate here?". The
+    answer lives in our app's models — we surface it directly on the core
+    Circuit detail page rather than asking users to navigate to the DID
+    Blocks / DIDs / Trunks list views and filter by hand.
+    """
+
+    model = "circuits.circuit"
+
+    object_detail_panels = (
+        ObjectsTablePanel(
+            section=SectionChoices.RIGHT_HALF, weight=600,
+            table_class=tables.DIDBlockTable, table_filter="circuit",
+            table_title="DID Blocks on this Circuit",
+            exclude_columns=["circuit"],
+        ),
+        ObjectsTablePanel(
+            section=SectionChoices.RIGHT_HALF, weight=650,
+            table_class=tables.DIDTable, table_filter="circuit",
+            table_title="Individual DIDs on this Circuit",
+            exclude_columns=["circuit"],
+        ),
+        ObjectsTablePanel(
+            section=SectionChoices.RIGHT_HALF, weight=700,
+            table_class=tables.TrunkTable, table_filter="circuit",
+            table_title="PBX Trunks Terminating this Circuit",
+            exclude_columns=["circuit"],
+        ),
+    )
+
+
 template_extensions = [
     DirectoryNumberExtension,
     PhoneExtension,
     TrunkExtension,
     AnalogGatewayExtension,
+    CircuitExtension,
 ]
