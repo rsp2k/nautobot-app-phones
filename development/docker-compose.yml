@@ -17,12 +17,16 @@ x-nautobot-common: &nautobot-common
   restart: unless-stopped
   environment:
     NAUTOBOT_ALLOWED_HOSTS: "${DOMAIN} nautobot-web localhost 127.0.0.1"
-    NAUTOBOT_DB_HOST: postgres
+    # Use the fully-qualified container name (not the short `postgres`
+    # alias) because nautobot-web is also on the caddy + freepbx-net
+    # networks, where foreign containers named `postgres` can shadow
+    # our compose-internal alias. Same logic applies to `redis`.
+    NAUTOBOT_DB_HOST: ${COMPOSE_PROJECT}-postgres
     NAUTOBOT_DB_PORT: "5432"
     NAUTOBOT_DB_NAME: ${NAUTOBOT_DB_NAME}
     NAUTOBOT_DB_USER: ${NAUTOBOT_DB_USER}
     NAUTOBOT_DB_PASSWORD: ${NAUTOBOT_DB_PASSWORD}
-    NAUTOBOT_REDIS_HOST: redis
+    NAUTOBOT_REDIS_HOST: ${COMPOSE_PROJECT}-redis
     NAUTOBOT_REDIS_PORT: "6379"
     NAUTOBOT_REDIS_PASSWORD: ${NAUTOBOT_REDIS_PASSWORD}
     NAUTOBOT_SECRET_KEY: ${NAUTOBOT_SECRET_KEY}

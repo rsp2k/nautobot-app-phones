@@ -206,9 +206,12 @@ class FreePBXSourceAdapter(Adapter):
         # Stage 6c: inbound routes → RoutePattern (incoming-side).
         self._load_inbound_routes(ps.name)
 
-        # Stages 6d+:
+        # Stage 6d: pickup groups (STUB — see client.list_pickup_groups
+        # docstring for the data-path blocker).
+        self._load_pickup_groups(ps.name)
+
+        # Stages 6e+:
         # self._load_ring_groups(ps.name)
-        # self._load_pickup_groups(ps.name)
 
     # -------------------------------------------- per-resource loaders
 
@@ -545,3 +548,45 @@ class FreePBXSourceAdapter(Adapter):
                 urgent=False,
                 discard_digits="",
             ))
+
+    # ----- Pickup groups (stub) ---------------------------------------------
+
+    def _load_pickup_groups(self, ps_name: str) -> None:
+        """Emit CallPickupGroup + CallPickupGroupMember records (currently a no-op).
+
+        Defensive stub. The blocker is on the client side
+        (see ``FreePBXClient.list_pickup_groups`` docstring): FreePBX
+        17's ``api`` module 17.0.6 doesn't expose pickup-group config
+        in either query or mutation, and the canonical UI-managed
+        state isn't directly queryable without driving the admin form.
+        We return early when the source-side list is empty so the
+        adapter's diff stays clean.
+        """
+        groups = self.client.list_pickup_groups()
+        if not groups:
+            return
+        # Unreachable today, but the shape is here for when the client
+        # gains a real data source. Each group dict is expected to have
+        # `name` and `member_extensions: list[str]`. Members get linked
+        # to the DN by extension number within the synthetic "(none)"
+        # partition.
+        for grp in groups:
+            name = (grp.get("name") or "").strip()
+            if not name:
+                continue
+            self.add(self.call_pickup_group(
+                name=name,
+                phone_system__name=ps_name,
+                pattern=(grp.get("pattern") or ""),
+                partition__name=None,
+                description=(grp.get("description") or ""),
+                vendor_extras={},
+            ))
+            for ext in (grp.get("member_extensions") or []):
+                self.add(self.call_pickup_group_member(
+                    pickup_group__name=name,
+                    pickup_group__phone_system__name=ps_name,
+                    directory_number__extension=str(ext),
+                    directory_number__partition__name=DEFAULT_PARTITION_NAME,
+                    priority=0,
+                ))

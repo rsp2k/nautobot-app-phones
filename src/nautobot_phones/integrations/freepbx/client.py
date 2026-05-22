@@ -196,6 +196,26 @@ class FreePBXClient:
         wrapper = data.get("fetchAllExtensions") or {}
         return wrapper.get("extension") or []
 
+    def list_pickup_groups(self) -> list[dict]:
+        """Fetch named pickup-group memberships.
+
+        STUB. FreePBX 17's `api` module 17.0.6 doesn't expose
+        ``namedcallgroup`` / ``namedpickupgroup`` in either the
+        ``fetchExtension`` query or the ``updateExtension`` mutation,
+        and the canonical FreePBX-side storage (kvstore_FreePBX_modules_Core
+        + extension-edit UI form state) is not directly queryable
+        without driving the admin UI. The values DO appear in the
+        generated /etc/asterisk/pjsip.endpoint.conf after a fwconsole
+        reload, but reading container files from Nautobot is a heavier
+        coupling than we want.
+
+        Returns an empty list — adapter callers should handle gracefully.
+        Revisit when Sangoma exposes pickup groups via the API module,
+        or when operators show enough demand to justify the file-read
+        coupling.
+        """
+        return []
+
     def list_inbound_routes(self) -> list[dict]:
         """Fetch all inbound routes via the allInboundRoutes GraphQL query.
 
