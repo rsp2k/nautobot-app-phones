@@ -18,12 +18,15 @@ class PhoneSystemFilterSet(NautobotFilterSet):
         fields = ["name", "vendor", "version", "hostname", "location"]
 
 
-class CarrierFilterSet(NautobotFilterSet):
-    """Filter set for Carrier list view."""
+class SipCircuitProfileFilterSet(NautobotFilterSet):
+    """Filter set for SipCircuitProfile list view."""
 
     class Meta:
-        model = models.Carrier
-        fields = ["name", "account_number"]
+        model = models.SipCircuitProfile
+        fields = [
+            "circuit", "pilot_e164", "sip_sessions",
+            "oli_clid_policy", "sensitivity",
+        ]
 
 
 class PartitionFilterSet(NautobotFilterSet):
@@ -55,7 +58,7 @@ class DIDBlockFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.DIDBlock
-        fields = ["start_e164", "end_e164", "carrier", "location", "phone_system"]
+        fields = ["start_e164", "end_e164", "provider", "circuit", "location", "phone_system"]
 
 
 class DIDFilterSet(NautobotFilterSet):
@@ -63,7 +66,7 @@ class DIDFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.DID
-        fields = ["e164", "block", "is_special"]
+        fields = ["e164", "block", "circuit", "is_special"]
 
 
 class PhoneFilterSet(NautobotFilterSet):
@@ -79,7 +82,7 @@ class TrunkFilterSet(NautobotFilterSet):
 
     class Meta:
         model = models.Trunk
-        fields = ["name", "phone_system", "trunk_type", "destination_address", "css"]
+        fields = ["name", "phone_system", "trunk_type", "destination_address", "css", "circuit"]
 
 
 class RoutePatternFilterSet(NautobotFilterSet):

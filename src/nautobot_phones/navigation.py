@@ -26,9 +26,9 @@ menu_items = (
                         permissions=["nautobot_phones.view_phonesystem"],
                     ),
                     NavMenuItem(
-                        link="plugins:nautobot_phones:carrier_list",
-                        name="Carriers",
-                        permissions=["nautobot_phones.view_carrier"],
+                        link="plugins:nautobot_phones:sipcircuitprofile_list",
+                        name="SIP Circuit Profiles",
+                        permissions=["nautobot_phones.view_sipcircuitprofile"],
                     ),
                 ),
             ),

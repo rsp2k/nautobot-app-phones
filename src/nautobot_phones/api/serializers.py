@@ -19,9 +19,9 @@ class PhoneSystemSerializer(NautobotModelSerializer):
         fields = "__all__"
 
 
-class CarrierSerializer(NautobotModelSerializer):
+class SipCircuitProfileSerializer(NautobotModelSerializer):
     class Meta:
-        model = models.Carrier
+        model = models.SipCircuitProfile
         fields = "__all__"
 
 

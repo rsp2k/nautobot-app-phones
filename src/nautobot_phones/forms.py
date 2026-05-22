@@ -44,21 +44,29 @@ class PhoneSystemFilterForm(NautobotFilterForm):
 
 
 # --------------------------------------------------------------------------
-# Carrier
+# SipCircuitProfile
 # --------------------------------------------------------------------------
-class CarrierForm(NautobotModelForm):
-    """Create/edit form for Carrier."""
+class SipCircuitProfileForm(NautobotModelForm):
+    """Create/edit form for SipCircuitProfile."""
 
     class Meta:
-        model = models.Carrier
-        fields = ("name", "description", "account_number")
+        model = models.SipCircuitProfile
+        fields = (
+            "circuit", "pilot_e164", "sip_sessions",
+            "oli_clid_policy", "tech_support",
+            "cut_sheet_received_date", "source_doc", "sensitivity",
+            "vendor_extras", "tags",
+        )
 
 
-class CarrierFilterForm(NautobotFilterForm):
-    """Filter sidebar form for Carrier list view."""
+class SipCircuitProfileFilterForm(NautobotFilterForm):
+    """Filter sidebar form for SipCircuitProfile list view."""
 
-    model = models.Carrier
-    field_order = ("q", "name", "account_number")
+    model = models.SipCircuitProfile
+    field_order = (
+        "q", "circuit", "pilot_e164", "sip_sessions",
+        "oli_clid_policy", "sensitivity",
+    )
     q = forms.CharField(required=False, label="Search")
 
 
@@ -127,14 +135,17 @@ class DIDBlockForm(NautobotModelForm):
 
     class Meta:
         model = models.DIDBlock
-        fields = ("start_e164", "end_e164", "carrier", "location", "phone_system", "description", "tags")
+        fields = (
+            "start_e164", "end_e164", "provider", "circuit",
+            "location", "phone_system", "description", "tags",
+        )
 
 
 class DIDBlockFilterForm(NautobotFilterForm):
     """Filter sidebar form for DIDBlock list view."""
 
     model = models.DIDBlock
-    field_order = ("q", "start_e164", "end_e164", "carrier", "location", "phone_system")
+    field_order = ("q", "start_e164", "end_e164", "provider", "circuit", "location", "phone_system")
     q = forms.CharField(required=False, label="Search")
 
 
@@ -146,14 +157,14 @@ class DIDForm(NautobotModelForm):
 
     class Meta:
         model = models.DID
-        fields = ("e164", "block", "is_special", "tags")
+        fields = ("e164", "block", "circuit", "is_special", "tags")
 
 
 class DIDFilterForm(NautobotFilterForm):
     """Filter sidebar form for DID list view."""
 
     model = models.DID
-    field_order = ("q", "e164", "block", "is_special")
+    field_order = ("q", "e164", "block", "circuit", "is_special")
     q = forms.CharField(required=False, label="Search")
 
 
@@ -197,14 +208,19 @@ class TrunkForm(NautobotModelForm):
 
     class Meta:
         model = models.Trunk
-        fields = ("name", "phone_system", "trunk_type", "destination_address", "destination_port", "css", "inbound_css", "vendor_extras", "tags")
+        fields = (
+            "name", "phone_system", "trunk_type",
+            "destination_address", "destination_port",
+            "css", "inbound_css", "circuit",
+            "vendor_extras", "tags",
+        )
 
 
 class TrunkFilterForm(NautobotFilterForm):
     """Filter sidebar form for Trunk list view."""
 
     model = models.Trunk
-    field_order = ("q", "name", "phone_system", "trunk_type", "destination_address", "css")
+    field_order = ("q", "name", "phone_system", "trunk_type", "destination_address", "css", "circuit")
     q = forms.CharField(required=False, label="Search")
     trunk_type = forms.MultipleChoiceField(choices=TrunkTypeChoices, required=False)
 

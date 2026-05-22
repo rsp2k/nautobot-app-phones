@@ -147,14 +147,19 @@ class PhoneSystemUIViewSet(NautobotUIViewSet):
     )
 
 
-class CarrierUIViewSet(NautobotUIViewSet):
-    """CRUD viewset for Carrier."""
+class SipCircuitProfileUIViewSet(NautobotUIViewSet):
+    """CRUD viewset for SipCircuitProfile.
 
-    queryset = models.Carrier.objects.all()
-    table_class = tables.CarrierTable
-    filterset_class = filters.CarrierFilterSet
-    filterset_form_class = forms.CarrierFilterForm
-    form_class = forms.CarrierForm
+    Profile is a OneToOne extension on circuits.Circuit; the detail page
+    surfaces the SIP-specific attributes alongside related DID blocks /
+    trunks that reference the same circuit.
+    """
+
+    queryset = models.SipCircuitProfile.objects.all()
+    table_class = tables.SipCircuitProfileTable
+    filterset_class = filters.SipCircuitProfileFilterSet
+    filterset_form_class = forms.SipCircuitProfileFilterForm
+    form_class = forms.SipCircuitProfileForm
     serializer_class = None
     lookup_field = "pk"
 
@@ -162,13 +167,22 @@ class CarrierUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["name", "description", "account_number"],
+                label="Carrier delivery",
+                fields=[
+                    "circuit", "pilot_e164", "sip_sessions",
+                    "oli_clid_policy", "tech_support",
+                    "cut_sheet_received_date", "source_doc", "sensitivity",
+                ],
             ),
-            ObjectsTablePanel(
-                section=SectionChoices.RIGHT_HALF, weight=100,
-                table_class=tables.DIDBlockTable, table_filter="carrier",
-                table_title="DID Blocks", exclude_columns=["carrier"],
+            ObjectFieldsPanel(
+                section=SectionChoices.LEFT_HALF, weight=200,
+                label="Vendor-specific config (long-tail)",
+                fields=["vendor_extras"],
+                value_transforms={"vendor_extras": [_vendor_extras_summary]},
             ),
+            # DID blocks/Trunks attached to the same circuit show up on the
+            # circuits.Circuit detail page natively via the FKs we added —
+            # no need to duplicate them here.
         ),
     )
 
@@ -293,7 +307,10 @@ class DIDBlockUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["start_e164", "end_e164", "size", "carrier", "location", "phone_system", "description"],
+                fields=[
+                    "start_e164", "end_e164", "size",
+                    "provider", "circuit", "location", "phone_system", "description",
+                ],
             ),
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,
@@ -319,7 +336,7 @@ class DIDUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["e164", "block", "is_special"],
+                fields=["e164", "block", "circuit", "is_special"],
             ),
         ),
     )
@@ -421,7 +438,11 @@ class TrunkUIViewSet(NautobotUIViewSet):
         panels=(
             ObjectFieldsPanel(
                 section=SectionChoices.LEFT_HALF, weight=100,
-                fields=["name", "phone_system", "trunk_type", "destination_address", "destination_port", "css", "inbound_css"],
+                fields=[
+                    "name", "phone_system", "trunk_type",
+                    "destination_address", "destination_port",
+                    "css", "inbound_css", "circuit",
+                ],
             ),
             ObjectsTablePanel(
                 section=SectionChoices.RIGHT_HALF, weight=100,

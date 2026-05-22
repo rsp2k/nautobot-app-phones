@@ -87,13 +87,13 @@ class TestDIDBlockValidator(TestCase):
     """DIDBlock.clean() enforces E.164 format and ordering."""
 
     def setUp(self) -> None:
-        self.carrier = factories.CarrierFactory()
+        self.provider = factories.CircuitsProviderFactory()
 
     def test_unequal_length_rejected(self) -> None:
         blk = models.DIDBlock(
             start_e164="15551234000",
             end_e164="155512349999",  # one extra digit
-            carrier=self.carrier,
+            provider=self.provider,
         )
         with self.assertRaises(ValidationError):
             blk.full_clean()
@@ -102,7 +102,7 @@ class TestDIDBlockValidator(TestCase):
         blk = models.DIDBlock(
             start_e164="+15551234000",  # leading plus is not a digit
             end_e164="+15551234999",
-            carrier=self.carrier,
+            provider=self.provider,
         )
         with self.assertRaises(ValidationError):
             blk.full_clean()
@@ -111,7 +111,7 @@ class TestDIDBlockValidator(TestCase):
         blk = models.DIDBlock(
             start_e164="15551234999",
             end_e164="15551234000",  # backwards
-            carrier=self.carrier,
+            provider=self.provider,
         )
         with self.assertRaises(ValidationError):
             blk.full_clean()
@@ -258,13 +258,35 @@ class TestRoutePatternXOR(TestCase):
             )
 
 
-class TestCarrier(TestCase):
-    """Carrier name is globally unique."""
+class TestSipCircuitProfile(TestCase):
+    """SipCircuitProfile is a OneToOne extension of circuits.Circuit."""
 
-    def test_unique_name(self) -> None:
-        factories.CarrierFactory(name="Acme Telco")
+    def test_create_minimal(self) -> None:
+        profile = factories.SipCircuitProfileFactory()
+        self.assertIsNotNone(profile.pk)
+        self.assertEqual(profile.sip_sessions, 23)
+        # OneToOne ↔ Circuit
+        self.assertEqual(profile.circuit.sip_profile, profile)
+
+    def test_only_one_profile_per_circuit(self) -> None:
+        circuit = factories.CircuitsCircuitFactory()
+        factories.SipCircuitProfileFactory(circuit=circuit)
         with self.assertRaises(IntegrityError):
-            factories.CarrierFactory(name="Acme Telco")
+            factories.SipCircuitProfileFactory(circuit=circuit)
+
+    def test_sparklight_bingham_shape(self) -> None:
+        """The actual SparkLight Bingham cut-sheet values land cleanly."""
+        profile = factories.SipCircuitProfileFactory(
+            sip_sessions=36,
+            pilot_e164="2082396520",
+            oli_clid_policy="Public, set to Pilot",
+            tech_support="1-877-469-2251 option 2",
+            source_doc="SIP Cut Sheet Bingham 1.xlsx",
+            sensitivity="internal",
+        )
+        self.assertEqual(profile.sip_sessions, 36)
+        self.assertEqual(profile.pilot_e164, "2082396520")
+        self.assertIn("877-469-2251", profile.tech_support)
 
 
 class TestTrunk(TestCase):

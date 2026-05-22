@@ -59,6 +59,16 @@ class Trunk(PrimaryModel):
         verbose_name="Inbound CSS",
         help_text="CSS applied to inbound calls arriving on this trunk.",
     )
+    circuit = models.ForeignKey(
+        to="circuits.Circuit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="phone_trunks",
+        help_text="Optional: the carrier circuit this PBX-side trunk terminates. "
+                  "Multiple Trunks (e.g. active/standby SBC pair) may point at "
+                  "the same Circuit.",
+    )
     vendor_extras = models.JSONField(default=dict, blank=True)
 
     natural_key_field_names = ["phone_system", "name"]

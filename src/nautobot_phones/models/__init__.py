@@ -20,10 +20,10 @@ from nautobot_phones.models.features import (
 from nautobot_phones.models.gateways import AnalogGateway, AnalogPort
 from nautobot_phones.models.numbers import (
     DID,
-    Carrier,
     DIDAssignment,
     DIDBlock,
     DirectoryNumber,
+    SipCircuitProfile,
 )
 from nautobot_phones.models.routing import (
     HuntList,
@@ -49,12 +49,12 @@ __all__ = [
     "CallPickupGroup",
     "CallPickupGroupMember",
     "CallingSearchSpace",
-    "Carrier",
     "DID",
     "DIDAssignment",
     "DIDBlock",
     "DeviceProfile",
     "DirectoryNumber",
+    "SipCircuitProfile",
     "HuntList",
     "HuntListMember",
     "HuntPilot",

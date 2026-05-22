@@ -10,6 +10,8 @@ Tests override specific fields by passing kwargs:
 
 import factory
 from factory.django import DjangoModelFactory
+from nautobot.circuits import models as circuits_models
+from nautobot.extras.models import Status
 
 from nautobot_phones import models
 from nautobot_phones.choices import (
@@ -19,6 +21,48 @@ from nautobot_phones.choices import (
     TrunkTypeChoices,
     VendorChoices,
 )
+
+
+# --------------------------------------------------------------------------
+# Local factories for Nautobot core circuits models — kept here (rather than
+# imported from a nautobot.core test-helpers module) so tests can `factory()`
+# Providers/Circuits without manually wiring CircuitType + Status each time.
+# --------------------------------------------------------------------------
+class CircuitsProviderFactory(DjangoModelFactory):
+    """A minimal circuits.Provider for tests."""
+
+    class Meta:
+        model = circuits_models.Provider
+
+    name = factory.Sequence(lambda n: f"Provider-{n}")
+
+
+class CircuitsCircuitTypeFactory(DjangoModelFactory):
+    """A minimal circuits.CircuitType for tests."""
+
+    class Meta:
+        model = circuits_models.CircuitType
+        django_get_or_create = ("name",)
+
+    name = "SIP Trunk"
+
+
+class CircuitsCircuitFactory(DjangoModelFactory):
+    """A minimal circuits.Circuit for tests.
+
+    Status uses whatever Status is registered for Circuit content type;
+    Nautobot ships seed Statuses so .first() reliably returns one.
+    """
+
+    class Meta:
+        model = circuits_models.Circuit
+
+    cid = factory.Sequence(lambda n: f"CID-{n}")
+    provider = factory.SubFactory(CircuitsProviderFactory)
+    circuit_type = factory.SubFactory(CircuitsCircuitTypeFactory)
+    status = factory.LazyFunction(
+        lambda: Status.objects.get_for_model(circuits_models.Circuit).first()
+    )
 
 
 class PhoneSystemFactory(DjangoModelFactory):
@@ -31,15 +75,6 @@ class PhoneSystemFactory(DjangoModelFactory):
     vendor = VendorChoices.CISCO_UCM
     version = "15.0.1.12900-234"
     hostname = factory.LazyAttribute(lambda o: f"{o.name.lower()}.example.org")
-
-
-class CarrierFactory(DjangoModelFactory):
-    """Default: sequential name."""
-
-    class Meta:
-        model = models.Carrier
-
-    name = factory.Sequence(lambda n: f"Carrier-{n}")
 
 
 class PartitionFactory(DjangoModelFactory):
@@ -82,7 +117,19 @@ class DIDBlockFactory(DjangoModelFactory):
     # Each factory call gets a fresh, non-overlapping range thanks to the sequence.
     start_e164 = factory.Sequence(lambda n: f"15551{n:04d}000")
     end_e164 = factory.LazyAttribute(lambda o: o.start_e164[:-3] + "999")
-    carrier = factory.SubFactory(CarrierFactory)
+    provider = factory.SubFactory(CircuitsProviderFactory)
+
+
+class SipCircuitProfileFactory(DjangoModelFactory):
+    """Default: 23-session SIP profile attached to a fresh Circuit."""
+
+    class Meta:
+        model = models.SipCircuitProfile
+
+    circuit = factory.SubFactory(CircuitsCircuitFactory)
+    sip_sessions = 23
+    pilot_e164 = factory.Sequence(lambda n: f"1555100{n:04d}")
+    oli_clid_policy = "Public, set to Pilot"
 
 
 class DIDFactory(DjangoModelFactory):

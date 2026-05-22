@@ -29,17 +29,28 @@ class PhoneSystemTable(BaseTable):
         default_columns = ("pk", "name", "vendor", "version", "hostname", "actions")
 
 
-class CarrierTable(BaseTable):
-    """List-view table for Carrier."""
+class SipCircuitProfileTable(BaseTable):
+    """List-view table for SipCircuitProfile."""
 
     pk = ToggleColumn()
-    name = tables.LinkColumn()
-    actions = ButtonsColumn(models.Carrier)
+    circuit = tables.LinkColumn()
+    pilot_e164 = tables.Column(verbose_name="Pilot")
+    sip_sessions = tables.Column(verbose_name="Sessions")
+    tech_support = tables.Column(verbose_name="Tech Support")
+    actions = ButtonsColumn(models.SipCircuitProfile)
 
     class Meta(BaseTable.Meta):
-        model = models.Carrier
-        fields = ("pk", "name", "account_number", "description", "actions")
-        default_columns = ("pk", "name", "account_number", "actions")
+        model = models.SipCircuitProfile
+        fields = (
+            "pk", "circuit", "pilot_e164", "sip_sessions",
+            "oli_clid_policy", "tech_support",
+            "cut_sheet_received_date", "source_doc", "sensitivity",
+            "actions",
+        )
+        default_columns = (
+            "pk", "circuit", "pilot_e164", "sip_sessions",
+            "tech_support", "actions",
+        )
 
 
 class PartitionTable(BaseTable):
@@ -91,15 +102,22 @@ class DIDBlockTable(BaseTable):
     pk = ToggleColumn()
     start_e164 = tables.LinkColumn(verbose_name="Start")
     end_e164 = tables.Column(verbose_name="End")
-    carrier = tables.LinkColumn()
+    provider = tables.LinkColumn()
+    circuit = tables.LinkColumn()
     location = tables.LinkColumn()
     size = tables.Column(orderable=False)
     actions = ButtonsColumn(models.DIDBlock)
 
     class Meta(BaseTable.Meta):
         model = models.DIDBlock
-        fields = ("pk", "start_e164", "end_e164", "size", "carrier", "location", "phone_system", "actions")
-        default_columns = ("pk", "start_e164", "end_e164", "size", "carrier", "location", "actions")
+        fields = (
+            "pk", "start_e164", "end_e164", "size",
+            "provider", "circuit", "location", "phone_system", "actions",
+        )
+        default_columns = (
+            "pk", "start_e164", "end_e164", "size",
+            "provider", "circuit", "location", "actions",
+        )
 
 
 class DIDTable(BaseTable):
@@ -108,13 +126,14 @@ class DIDTable(BaseTable):
     pk = ToggleColumn()
     e164 = tables.LinkColumn()
     block = tables.LinkColumn()
+    circuit = tables.LinkColumn()
     is_special = tables.BooleanColumn()
     actions = ButtonsColumn(models.DID)
 
     class Meta(BaseTable.Meta):
         model = models.DID
-        fields = ("pk", "e164", "block", "is_special", "actions")
-        default_columns = ("pk", "e164", "block", "is_special", "actions")
+        fields = ("pk", "e164", "block", "circuit", "is_special", "actions")
+        default_columns = ("pk", "e164", "block", "circuit", "is_special", "actions")
 
 
 class PhoneTable(BaseTable):
@@ -170,12 +189,19 @@ class TrunkTable(BaseTable):
     name = tables.LinkColumn()
     phone_system = tables.LinkColumn()
     css = tables.LinkColumn(verbose_name="CSS")
+    circuit = tables.LinkColumn()
     actions = ButtonsColumn(models.Trunk)
 
     class Meta(BaseTable.Meta):
         model = models.Trunk
-        fields = ("pk", "name", "phone_system", "trunk_type", "destination_address", "destination_port", "css", "actions")
-        default_columns = ("pk", "name", "phone_system", "trunk_type", "destination_address", "actions")
+        fields = (
+            "pk", "name", "phone_system", "trunk_type",
+            "destination_address", "destination_port", "css", "circuit", "actions",
+        )
+        default_columns = (
+            "pk", "name", "phone_system", "trunk_type",
+            "destination_address", "circuit", "actions",
+        )
 
 
 class RoutePatternTable(BaseTable):

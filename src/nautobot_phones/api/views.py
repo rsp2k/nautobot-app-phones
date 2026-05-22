@@ -16,10 +16,10 @@ class PhoneSystemAPIViewSet(NautobotModelViewSet):
     filterset_class = filters.PhoneSystemFilterSet
 
 
-class CarrierAPIViewSet(NautobotModelViewSet):
-    queryset = models.Carrier.objects.all()
-    serializer_class = serializers.CarrierSerializer
-    filterset_class = filters.CarrierFilterSet
+class SipCircuitProfileAPIViewSet(NautobotModelViewSet):
+    queryset = models.SipCircuitProfile.objects.all()
+    serializer_class = serializers.SipCircuitProfileSerializer
+    filterset_class = filters.SipCircuitProfileFilterSet
 
 
 class PartitionAPIViewSet(NautobotModelViewSet):

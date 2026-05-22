@@ -1,38 +1,21 @@
-"""Numbers and assignments: Carrier, DirectoryNumber, DIDBlock, DID, DIDAssignment.
+"""Numbers and assignments: DirectoryNumber, SipCircuitProfile, DIDBlock, DID, DIDAssignment.
 
 DID modeling uses ranges (DIDBlock) as primary records. Individual DID rows
 materialize only when an individual number gets assigned or marked special
 (reserved, test, fax-only, etc.).
+
+Carrier-side vendor identity lives in Nautobot's built-in ``circuits.Provider``
+and the specific delivery (the trunk SparkLight sold you, with capacity and
+account info) lives in ``circuits.Circuit`` — this app's ``SipCircuitProfile``
+extends ``circuits.Circuit`` with SIP-specific attributes (session count,
+pilot number, OLI/CLID policy, tech support contact).
 """
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
-from nautobot.apps.models import BaseModel, OrganizationalModel, PrimaryModel
-
-
-class Carrier(OrganizationalModel):
-    """A telecom carrier providing DIDs and trunks (Verizon, AT&T, Twilio, etc.)."""
-
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-    account_number = models.CharField(
-        max_length=64,
-        blank=True,
-        help_text="Carrier-side account or BAN identifier (informational).",
-    )
-
-    natural_key_field_names = ["name"]
-
-    class Meta:
-        """Meta options for Carrier."""
-
-        ordering = ("name",)
-
-    def __str__(self) -> str:
-        """Display string."""
-        return self.name
+from nautobot.apps.models import BaseModel, PrimaryModel
 
 
 class DirectoryNumber(PrimaryModel):
@@ -103,6 +86,87 @@ class DirectoryNumber(PrimaryModel):
         return f"{self.partition.name}/{self.extension}"
 
 
+class SipCircuitProfile(PrimaryModel):
+    """SIP-specific attributes extending a ``circuits.Circuit`` record.
+
+    The circuits app already models the vendor (``Provider``), the specific
+    delivery (``Circuit``, with cid/install_date/commit_rate/etc.), and the
+    physical handoff (``CircuitTermination``). What it doesn't know about
+    is SIP semantics: how many concurrent sessions the carrier sells you,
+    which DID you're supposed to send as outbound CLID, what OLI policy
+    governs that choice. This OneToOne extension covers exactly those.
+
+    Created lazily — a circuit doesn't need a profile unless it carries SIP.
+    Deleting the parent Circuit cascades and removes the profile.
+    """
+
+    circuit = models.OneToOneField(
+        to="circuits.Circuit",
+        on_delete=models.CASCADE,
+        related_name="sip_profile",
+        help_text="The carrier circuit this profile extends.",
+    )
+    pilot_e164 = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Main/pilot number, digits only. Often the OLI/CLID for outbound calls "
+                  "(e.g. '2082396520' for the SparkLight Bingham trunk).",
+    )
+    sip_sessions = models.PositiveIntegerField(
+        help_text="Concurrent SIP session ceiling sold by the carrier. Hard cap on "
+                  "simultaneous calls across the entire DID pool routed via this circuit.",
+    )
+    oli_clid_policy = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Outbound CLID policy (e.g. 'Public, set to Pilot', "
+                  "'Pass-through DID', 'Anonymous').",
+    )
+    tech_support = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Carrier tech support contact, as printed on the cut sheet "
+                  "(e.g. '1-877-469-2251 option 2'). Free text — phone, email, "
+                  "or URL all welcome.",
+    )
+    cut_sheet_received_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date the carrier delivered the cut sheet / config. Distinct from "
+                  "circuit install_date; useful for tracking which document version "
+                  "drove this configuration.",
+    )
+    source_doc = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Filename or reference for the source cut sheet "
+                  "(e.g. 'SIP Cut Sheet Bingham 1.xlsx').",
+    )
+    sensitivity = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Sensitivity tag (e.g. 'internal', 'public', 'confidential').",
+    )
+    vendor_extras = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Carrier-specific fields not modeled as columns. Adapter-driven.",
+    )
+
+    natural_key_field_names = ["circuit"]
+
+    class Meta:
+        """Meta options for SipCircuitProfile."""
+
+        ordering = ("circuit",)
+        verbose_name = "SIP circuit profile"
+        verbose_name_plural = "SIP circuit profiles"
+
+    def __str__(self) -> str:
+        """Display string."""
+        return f"{self.circuit.cid} (SIP, {self.sip_sessions} sessions)"
+
+
 class DIDBlock(PrimaryModel):
     """A contiguous block of DIDs from a carrier.
 
@@ -120,10 +184,21 @@ class DIDBlock(PrimaryModel):
         max_length=32,
         help_text="Last number in the block, digits only, same length as start_e164.",
     )
-    carrier = models.ForeignKey(
-        to="nautobot_phones.Carrier",
+    provider = models.ForeignKey(
+        to="circuits.Provider",
         on_delete=models.PROTECT,
+        related_name="phone_did_blocks",
+        help_text="The carrier (Nautobot circuits.Provider) that delivers this DID block.",
+    )
+    circuit = models.ForeignKey(
+        to="circuits.Circuit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="did_blocks",
+        help_text="Optional: the specific carrier circuit that delivers this block "
+                  "(e.g. the SIP trunk these DIDs route over). Inventory rows can "
+                  "exist before circuit assignment.",
     )
     location = models.ForeignKey(
         to="dcim.Location",
@@ -146,8 +221,8 @@ class DIDBlock(PrimaryModel):
     class Meta:
         """Meta options for DIDBlock."""
 
-        ordering = ("carrier", "start_e164")
-        unique_together = (("start_e164", "end_e164", "carrier"),)
+        ordering = ("provider", "start_e164")
+        unique_together = (("start_e164", "end_e164", "provider"),)
         verbose_name = "DID block"
         verbose_name_plural = "DID blocks"
 
@@ -176,7 +251,7 @@ class DIDBlock(PrimaryModel):
 
     def __str__(self) -> str:
         """Display string."""
-        return f"{self.start_e164}-{self.end_e164} ({self.carrier.name})"
+        return f"{self.start_e164}-{self.end_e164} ({self.provider.name})"
 
 
 class DID(PrimaryModel):
@@ -190,6 +265,16 @@ class DID(PrimaryModel):
         blank=True,
         related_name="dids",
         help_text="Parent block. Null for one-off DIDs not part of any block.",
+    )
+    circuit = models.ForeignKey(
+        to="circuits.Circuit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dids",
+        help_text="Optional: the specific carrier circuit delivering this DID. "
+                  "Usually inherited from block.circuit; set directly only for "
+                  "one-off DIDs that aren't part of any block.",
     )
     is_special = models.BooleanField(
         default=False,

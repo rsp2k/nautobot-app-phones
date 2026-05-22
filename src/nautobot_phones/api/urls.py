@@ -10,7 +10,7 @@ from nautobot_phones.api import views
 
 router = OrderedDefaultRouter()
 router.register("phone-systems", views.PhoneSystemAPIViewSet)
-router.register("carriers", views.CarrierAPIViewSet)
+router.register("sip-circuit-profiles", views.SipCircuitProfileAPIViewSet)
 router.register("partitions", views.PartitionAPIViewSet)
 router.register("calling-search-spaces", views.CallingSearchSpaceAPIViewSet)
 router.register("css-partition-memberships", views.CSSPartitionMembershipAPIViewSet)

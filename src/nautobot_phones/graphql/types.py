@@ -16,10 +16,10 @@ class PhoneSystemType(OptimizedNautobotObjectType):
         filterset_class = filters.PhoneSystemFilterSet
 
 
-class CarrierType(OptimizedNautobotObjectType):
+class SipCircuitProfileType(OptimizedNautobotObjectType):
     class Meta:
-        model = models.Carrier
-        filterset_class = filters.CarrierFilterSet
+        model = models.SipCircuitProfile
+        filterset_class = filters.SipCircuitProfileFilterSet
 
 
 class PartitionType(OptimizedNautobotObjectType):
@@ -182,7 +182,7 @@ class CallPickupGroupMemberType(OptimizedNautobotObjectType):
 
 graphql_types = [
     PhoneSystemType,
-    CarrierType,
+    SipCircuitProfileType,
     PartitionType,
     CallingSearchSpaceType,
     CSSPartitionMembershipType,
