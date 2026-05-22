@@ -32,6 +32,7 @@ class HeatmapCell:
     position: str           # "00" through "99"
     e164: str | None        # full E.164 if present, else None for gaps
     status: str             # "gap" | "present" | "routed" | "unrouted" | "pilot"
+    url: str | None = None  # detail-page URL if clickable, else None for gaps
 
 
 @dataclass
@@ -91,23 +92,27 @@ def build_heatmap_data(profile) -> HeatmapData:
     DID rows. Block-only DIDs (never materialized as a DID row) can't have
     an assignment, so they're marked "unrouted" by definition.
     """
+    from django.urls import reverse
+
     from nautobot_phones.models import DID, DIDAssignment, DIDBlock
 
     circuit = profile.circuit
     pilot_e164 = profile.pilot_e164 or ""
 
     # Step 1: collect every E.164 the circuit owns, with its source-of-truth flag.
-    # owned[e164] = {"in_block": bool, "did_obj": DID | None}
+    # owned[e164] = {"in_block": bool, "did_obj": DID | None, "block_pk": UUID | None}
     owned: dict[str, dict] = {}
 
     blocks = DIDBlock.objects.filter(circuit=circuit).order_by("start_e164")
     for block in blocks:
         for e164 in _expand_block_e164s(block.start_e164, block.end_e164):
-            owned[e164] = {"in_block": True, "did_obj": None}
+            owned[e164] = {"in_block": True, "did_obj": None, "block_pk": block.pk}
 
     dids = DID.objects.filter(circuit=circuit).select_related("assignment")
     for did in dids:
-        record = owned.setdefault(did.e164, {"in_block": False, "did_obj": None})
+        record = owned.setdefault(
+            did.e164, {"in_block": False, "did_obj": None, "block_pk": None},
+        )
         record["did_obj"] = did
 
     # Step 2: figure out routing status for materialized DIDs.
@@ -142,8 +147,23 @@ def build_heatmap_data(profile) -> HeatmapData:
             status = "unrouted"
         else:  # pragma: no cover - shouldn't happen given owned[] construction
             status = "gap"
+        # Resolve cell URL: prefer DID detail (more specific) over block detail.
+        # Materialized DIDs open their own detail page; block-only cells fall
+        # back to the parent block's detail page so operators can still drill
+        # into the inventory record.
+        url: str | None = None
+        if info["did_obj"] is not None:
+            url = reverse(
+                "plugins:nautobot_phones:did",
+                kwargs={"pk": info["did_obj"].pk},
+            )
+        elif info["block_pk"] is not None:
+            url = reverse(
+                "plugins:nautobot_phones:didblock",
+                kwargs={"pk": info["block_pk"]},
+            )
         hundred[prefix_8][position] = HeatmapCell(
-            position=position, e164=e164, status=status,
+            position=position, e164=e164, status=status, url=url,
         )
 
     # Step 4: build every hundred-block's full 100-cell grid, filling

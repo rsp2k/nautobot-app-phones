@@ -176,9 +176,27 @@
 .dh-cell {
   background: var(--dh-gap);
   border-radius: 2px;
-  transition: opacity 100ms ease;
+  transition: opacity 100ms ease, transform 80ms ease, outline-color 80ms ease;
   min-width: 8px;
   min-height: 8px;
+  display: block;  /* applies to both <span> and <a> variants */
+}
+
+/* Clickable cells (<a>) get pointer cursor + hover/focus affordances. */
+a.dh-cell {
+  text-decoration: none;
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+}
+a.dh-cell:hover {
+  transform: scale(1.4);
+  z-index: 2;
+  position: relative;
+}
+a.dh-cell:focus-visible {
+  outline-color: #fff;
+  z-index: 3;
+  position: relative;
 }
 .dh-cell--routed   { background: var(--dh-routed); }
 .dh-cell--unrouted { background: var(--dh-unrouted); }

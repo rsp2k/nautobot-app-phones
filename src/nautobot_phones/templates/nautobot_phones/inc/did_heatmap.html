@@ -54,10 +54,18 @@
             </div>
             <div class="dh-grid">
               {% for cell in hb.cells %}
-                <span class="dh-cell dh-cell--{{ cell.status }}"
-                      data-e164="{{ cell.e164|default:'' }}"
-                      data-status="{{ cell.status }}"
-                      {% if cell.e164 %}title="{{ cell.e164 }} ({{ cell.status }})"{% endif %}></span>
+                {% if cell.url %}
+                  <a class="dh-cell dh-cell--{{ cell.status }}"
+                     href="{{ cell.url }}"
+                     data-e164="{{ cell.e164|default:'' }}"
+                     data-status="{{ cell.status }}"
+                     title="{{ cell.e164 }} ({{ cell.status }}) — click to open"></a>
+                {% else %}
+                  <span class="dh-cell dh-cell--{{ cell.status }}"
+                        data-e164="{{ cell.e164|default:'' }}"
+                        data-status="{{ cell.status }}"
+                        {% if cell.e164 %}title="{{ cell.e164 }} ({{ cell.status }})"{% endif %}></span>
+                {% endif %}
               {% endfor %}
             </div>
           </div>
