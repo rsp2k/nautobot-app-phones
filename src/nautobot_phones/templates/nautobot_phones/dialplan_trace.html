@@ -21,27 +21,77 @@
     </p>
   </div>
 
-  <form method="post" class="dpt-form" novalidate>
+  <form method="post" class="dpt-form" novalidate id="dpt-form">
     {% csrf_token %}
-    <div class="row">
-      <div class="col-md-4">
-        <label for="{{ form.phone_system.id_for_label }}" class="form-label">
-          Phone system
-        </label>
-        {{ form.phone_system }}
-        {% if form.phone_system.help_text %}
-          <div class="form-text">{{ form.phone_system.help_text }}</div>
-        {% endif %}
+    {{ form.mode }}
+    {{ form.endpoint_label }}
+
+    <ul class="nav nav-tabs dpt-mode-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link dpt-tab-btn"
+                data-dpt-mode="endpoint" role="tab"
+                aria-selected="false">
+          <span class="mdi mdi-magnify" aria-hidden="true"></span>
+          By Endpoint
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link dpt-tab-btn"
+                data-dpt-mode="manual" role="tab"
+                aria-selected="false">
+          <span class="mdi mdi-tune-vertical" aria-hidden="true"></span>
+          Manual
+        </button>
+      </li>
+    </ul>
+
+    {# By-Endpoint mode #}
+    <fieldset class="dpt-pane" data-dpt-pane="endpoint">
+      <div class="row">
+        <div class="col-md-12">
+          <label for="{{ form.endpoint.id_for_label }}" class="form-label">
+            {{ form.endpoint.label }}
+          </label>
+          <select name="endpoint" id="{{ form.endpoint.id_for_label }}"
+                  class="form-select dpt-endpoint-select"
+                  data-search-url="{% url 'plugins:nautobot_phones:dialplan_endpoint_search' %}">
+            {% if form.endpoint.value %}
+              <option value="{{ form.endpoint.value }}" selected>
+                {{ form.endpoint_label.value|default:form.endpoint.value }}
+              </option>
+            {% endif %}
+          </select>
+          <div class="form-text">{{ form.endpoint.help_text }}</div>
+        </div>
       </div>
-      <div class="col-md-4">
-        <label for="{{ form.starting_css.id_for_label }}" class="form-label">
-          Starting CSS
-        </label>
-        {{ form.starting_css }}
-        {% if form.starting_css.help_text %}
-          <div class="form-text">{{ form.starting_css.help_text }}</div>
-        {% endif %}
+    </fieldset>
+
+    {# Manual mode #}
+    <fieldset class="dpt-pane" data-dpt-pane="manual">
+      <div class="row">
+        <div class="col-md-6">
+          <label for="{{ form.phone_system.id_for_label }}" class="form-label">
+            Phone system
+          </label>
+          {{ form.phone_system }}
+          {% if form.phone_system.help_text %}
+            <div class="form-text">{{ form.phone_system.help_text }}</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <label for="{{ form.starting_css.id_for_label }}" class="form-label">
+            Starting CSS
+          </label>
+          {{ form.starting_css }}
+          {% if form.starting_css.help_text %}
+            <div class="form-text">{{ form.starting_css.help_text }}</div>
+          {% endif %}
+        </div>
       </div>
+    </fieldset>
+
+    {# Always-visible: optional calling-from + dialed digits + submit. #}
+    <div class="row mt-12">
       <div class="col-md-4">
         <label for="{{ form.calling_from.id_for_label }}" class="form-label">
           {{ form.calling_from.label }}
@@ -51,9 +101,7 @@
           <div class="form-text">{{ form.calling_from.help_text }}</div>
         {% endif %}
       </div>
-    </div>
-    <div class="row mt-12">
-      <div class="col-md-10">
+      <div class="col-md-6">
         <label for="{{ form.dialed_digits.id_for_label }}" class="form-label">
           Dialed digits
         </label>
@@ -82,8 +130,20 @@
     {% endfor %}
   </form>
 
+  <script src="{% static 'nautobot_phones/js/dialplan_trace.js' %}" defer></script>
+
   {% if trace_steps %}
     <div class="dpt-result">
+      {% if endpoint_label %}
+        <div class="dpt-endpoint-banner">
+          <span class="mdi mdi-target" aria-hidden="true"></span>
+          Endpoint: <strong>{{ endpoint_label }}</strong>
+          &nbsp;→&nbsp; derived
+          <code class="dpt-css">{{ trace_input.starting_css.name }}</code>
+          in
+          <code>{{ trace_input.phone_system.name }}</code>
+        </div>
+      {% endif %}
       <h2 class="dpt-result-title">
         Trace result · dialed
         <code class="dpt-dialed">{{ trace_input.dialed_digits }}</code>

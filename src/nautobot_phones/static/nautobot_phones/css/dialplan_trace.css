@@ -273,3 +273,58 @@
     margin-bottom: 1rem;
   }
 }
+
+/* -- Mode tabs (By Endpoint / Manual) -- */
+
+.dpt-mode-tabs {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.dpt-mode-tabs .dpt-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: var(--bs-body-color, #212529);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.dpt-mode-tabs .dpt-tab-btn.active {
+  background: var(--bs-body-bg, #fff);
+  border-color: var(--bs-border-color, #dee2e6);
+  border-bottom-color: transparent;
+  color: var(--bs-primary, #0d6efd);
+  position: relative;
+  z-index: 1;
+}
+
+.dpt-pane {
+  border: 0;
+  padding: 0.5rem 0 0.25rem;
+}
+
+/* -- Endpoint provenance banner on the result page -- */
+
+.dpt-endpoint-banner {
+  background: var(--bs-info-bg-subtle, #cff4fc);
+  border-left: 4px solid var(--bs-info, #0dcaf0);
+  color: var(--bs-body-color, #212529);
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.dpt-endpoint-banner .mdi {
+  color: var(--bs-info, #0dcaf0);
+  margin-right: 0.4rem;
+}
+
+/* Select2 sizing tweak for the endpoint picker — make it match
+   Nautobot's other form fields rather than Select2's default. */
+.dpt-endpoint-select + .select2-container .select2-selection {
+  min-height: 38px;
+  border-color: var(--bs-border-color, #ced4da);
+}

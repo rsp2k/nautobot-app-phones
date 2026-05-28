@@ -23,21 +23,50 @@ class DialPlanTraceForm(forms.Form):
     """Inputs for the dial-plan trace visualizer.
 
     Standalone form (not a ModelForm — the trace doesn't write
-    anything). Operators pick a PhoneSystem + starting CSS + dial
-    digits; the view runs ``dialplan.trace()`` and renders the result.
+    anything). Two operator-facing modes:
 
-    Uses ``DynamicModelChoiceField`` for ``phone_system`` and
-    ``starting_css`` — Nautobot's Select2-backed widget that filters
-    via the REST API. Real customer clusters can have hundreds of
-    CSSes; the plain ``<select>`` becomes unusable at that scale.
+    * ``mode="endpoint"`` — operator searches for a Phone / DN / Trunk
+      and the view derives ``phone_system`` + ``starting_css`` from
+      that endpoint. The ``endpoint`` field carries a composite key
+      ``kind:uuid`` returned by the autocomplete API.
+    * ``mode="manual"`` — operator picks ``phone_system`` and
+      ``starting_css`` directly (the original v1 flow).
+
+    The two manual dropdowns and the endpoint field are all wired to
+    Select2 autocompletes. Real customer clusters have hundreds of
+    CSSes and thousands of phones; plain ``<select>`` becomes unusable
+    at that scale.
     """
+
+    # Discriminator — set by the template's tab toggle JS. Hidden
+    # because the user picks a tab, not a field value.
+    mode = forms.CharField(
+        max_length=16,
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+    endpoint = forms.CharField(
+        max_length=64,
+        required=False,
+        label="Endpoint",
+        help_text="Search by phone name/MAC/description, DN extension, "
+                  "or trunk name. The trace starts from the matched "
+                  "endpoint's calling search space.",
+    )
+    # Round-trip label so the result page can show 'Endpoint: 📞 SEP...'
+    # in the trace banner without re-querying the database.
+    endpoint_label = forms.CharField(
+        max_length=255, required=False, widget=forms.HiddenInput(),
+    )
 
     phone_system = DynamicModelChoiceField(
         queryset=models.PhoneSystem.objects.all(),
+        required=False,
         help_text="The phone system whose dial plan to trace through.",
     )
     starting_css = DynamicModelChoiceField(
         queryset=models.CallingSearchSpace.objects.all(),
+        required=False,
         # Filter the CSS dropdown by the picked phone_system. The
         # widget refreshes its results when phone_system changes.
         query_params={"phone_system": "$phone_system"},
@@ -60,6 +89,96 @@ class DialPlanTraceForm(forms.Form):
                   "Doesn't change pattern matching in v1 — surfaces in the "
                   "result header so the trace is self-documenting.",
     )
+
+    def clean(self):
+        """Mode-conditional validation + endpoint resolution.
+
+        For ``mode="endpoint"`` we parse the composite ``endpoint``
+        key, look up the underlying object, derive ``phone_system``
+        and ``starting_css``, and populate them on ``cleaned_data``
+        so downstream code is mode-agnostic.
+
+        For ``mode="manual"`` (default) we require both
+        ``phone_system`` and ``starting_css``.
+        """
+        cleaned = super().clean()
+        mode = cleaned.get("mode") or "manual"
+
+        if mode == "endpoint":
+            endpoint = (cleaned.get("endpoint") or "").strip()
+            if not endpoint:
+                raise forms.ValidationError(
+                    "Pick an endpoint to trace from, or switch to the "
+                    "Manual tab to pick a phone system and CSS directly."
+                )
+            resolved = self._resolve_endpoint(endpoint)
+            if resolved is None:
+                raise forms.ValidationError(
+                    f"Couldn't resolve endpoint {endpoint!r}. The phone, "
+                    "DN, or trunk may have been deleted since the form "
+                    "was loaded."
+                )
+            ps, css, label = resolved
+            if css is None:
+                raise forms.ValidationError(
+                    f"Endpoint {label!r} has no derivable calling search "
+                    "space — switch to Manual mode to pick a CSS, or set "
+                    "the endpoint's CSS in CCM/FreePBX and resync."
+                )
+            cleaned["phone_system"] = ps
+            cleaned["starting_css"] = css
+            cleaned["endpoint_label"] = label
+            return cleaned
+
+        # Manual mode (default).
+        if not cleaned.get("phone_system"):
+            self.add_error("phone_system", "Pick a phone system.")
+        if not cleaned.get("starting_css"):
+            self.add_error("starting_css", "Pick a starting CSS.")
+        return cleaned
+
+    @staticmethod
+    def _resolve_endpoint(composite):
+        """Parse a ``kind:uuid`` composite key and return
+        ``(phone_system, css, label)`` or ``None``. Keeps resolution
+        logic in the form so view/template stay simple."""
+        if ":" not in composite:
+            return None
+        kind, _, pk = composite.partition(":")
+        if kind == "phone":
+            phone = (
+                models.Phone.objects
+                .select_related("phone_system")
+                .filter(pk=pk)
+                .first()
+            )
+            if phone is None:
+                return None
+            css_name = (phone.vendor_extras or {}).get(
+                "callingSearchSpaceName"
+            ) or ""
+            css = (
+                models.CallingSearchSpace.objects
+                .filter(phone_system=phone.phone_system, name=css_name)
+                .first()
+                if css_name else None
+            )
+            return phone.phone_system, css, f"📞 {phone.device_name}"
+        if kind == "trunk":
+            trunk = (
+                models.Trunk.objects
+                .select_related("phone_system", "inbound_css")
+                .filter(pk=pk)
+                .first()
+            )
+            if trunk is None:
+                return None
+            return trunk.phone_system, trunk.inbound_css, f"🔌 {trunk.name}"
+        # ``kind == "dn"`` is only emitted as an orphan-marker by the
+        # autocomplete (selectable=False); DN hits get returned as the
+        # holder phone with ``id="phone:<uuid>"``. Anything else here
+        # is a stale form submission.
+        return None
 from nautobot_phones.choices import (
     AnalogGatewayProtocolChoices,
     PhoneDeviceKindChoices,

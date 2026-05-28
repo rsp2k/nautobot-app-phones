@@ -42,4 +42,9 @@ urlpatterns = [
     # and auto-runs the trace when ``dialed_digits`` is present.
     path("dialplan-trace/", views.DialPlanTraceView.as_view(),
          name="dialplan_trace"),
+    # JSON autocomplete for the trace form's "By Endpoint" tab —
+    # unified search across Phone, DirectoryNumber, and Trunk.
+    path("dialplan-trace/endpoint-search/",
+         views.DialPlanEndpointSearchView.as_view(),
+         name="dialplan_endpoint_search"),
 ] + router.urls

@@ -12,6 +12,7 @@ detail view via ObjectsTablePanel.
 """
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils.html import format_html
 from django.views.generic import View
@@ -1026,8 +1027,12 @@ class DialPlanTraceView(LoginRequiredMixin, View):
 
     def get(self, request):
         initial = {}
-        for key in ("phone_system", "starting_css", "dialed_digits",
-                    "calling_from"):
+        # ``mode`` + ``endpoint`` support deep links from external places
+        # (e.g. a future ``[trace from this phone]`` link in a list view).
+        # Manual-mode keys are kept too — the phone/trunk-detail panels
+        # already use those.
+        for key in ("mode", "endpoint", "phone_system", "starting_css",
+                    "dialed_digits", "calling_from"):
             if request.GET.get(key):
                 initial[key] = request.GET[key]
         # If the user landed here with pre-filled GET params and digits,
@@ -1065,4 +1070,161 @@ class DialPlanTraceView(LoginRequiredMixin, View):
                 "dialed_digits": form.cleaned_data["dialed_digits"],
                 "calling_from": form.cleaned_data.get("calling_from") or "",
             },
+            "endpoint_label": form.cleaned_data.get("endpoint_label") or "",
         })
+
+
+class DialPlanEndpointSearchView(LoginRequiredMixin, View):
+    """JSON autocomplete backing the trace form's 'By Endpoint' tab.
+
+    Searches Phone (device_name, MAC, description), DirectoryNumber
+    (extension — returns one result per holder phone), and Trunk
+    (name) for a substring match against ``?q=<text>``. For each hit
+    we derive the ``phone_system`` and ``starting_css`` the trace
+    should use, so the form can dispatch with no further lookups:
+
+    * Phone → CSS taken from ``vendor_extras["callingSearchSpaceName"]``
+      resolved against the same phone_system. Falls back to "" (the
+      caller can override on the form).
+    * DN → walks each Phone holding a Line on this DN; emits one row
+      per holder so the operator picks which phone to trace from.
+      A DN with no phone holders is included with a hint label so
+      operators see it but can't select it for tracing.
+    * Trunk → CSS = ``trunk.inbound_css`` (inbound-call simulation).
+
+    Returns the Select2 AJAX shape ``{"results": [{"id", "text",
+    "phone_system_id", "starting_css_id", "kind", ...}]}``. Custom
+    keys are passed through Select2's ``processResults`` and surfaced
+    in the trace result page as "Endpoint:" provenance.
+
+    Search is cheap (icontains over a handful of indexed columns,
+    LIMIT 10 per kind) — no full-text index needed at this scale.
+    """
+
+    PER_KIND_LIMIT = 10
+
+    def get(self, request):
+        q = (request.GET.get("q") or "").strip()
+        results: list[dict] = []
+        if len(q) < 2:
+            # Avoid scanning the whole table for empty / single-char queries.
+            return JsonResponse({"results": results})
+        results.extend(self._search_phones(q))
+        results.extend(self._search_dns(q))
+        results.extend(self._search_trunks(q))
+        return JsonResponse({"results": results})
+
+    def _search_phones(self, q):
+        from django.db.models import Q
+        qs = (
+            models.Phone.objects
+            .select_related("phone_system")
+            .filter(
+                Q(device_name__icontains=q)
+                | Q(mac_address__icontains=q)
+                | Q(description__icontains=q),
+            )[: self.PER_KIND_LIMIT]
+        )
+        out = []
+        for ph in qs:
+            css_id, css_name = self._derive_phone_css(ph)
+            desc = f" — {ph.description}" if ph.description else ""
+            out.append({
+                "id": f"phone:{ph.pk}",
+                "text": f"📞 {ph.device_name}{desc}  ·  {ph.phone_system.name}",
+                "kind": "phone",
+                "phone_system_id": str(ph.phone_system_id),
+                "phone_system_name": ph.phone_system.name,
+                "starting_css_id": css_id,
+                "starting_css_name": css_name,
+            })
+        return out
+
+    def _search_dns(self, q):
+        """Search DNs by extension — emit one result per Phone holding
+        a Line on that DN. Lets operators trace 'who would dial X get
+        when calling Y' starting from any of the holder phones."""
+        from django.db.models import Q
+        qs = (
+            models.DirectoryNumber.objects
+            .select_related("phone_system", "partition")
+            .filter(Q(extension__icontains=q))[: self.PER_KIND_LIMIT]
+        )
+        out = []
+        for dn in qs:
+            holders = (
+                models.Phone.objects
+                .filter(lines__directory_number=dn)
+                .select_related("phone_system")
+                .distinct()
+            )
+            holders_list = list(holders[:5])  # keep dropdown sane
+            if not holders_list:
+                # DN exists but no phone holds it (orphan DN or hunt-pilot
+                # target). Surface it disabled-style so operators see it
+                # but can't pick it (no CSS to trace from).
+                out.append({
+                    "id": f"dn:{dn.pk}",
+                    "text": f"📋 {dn.extension} in {dn.partition.name}  "
+                            f"(no holder phone)  ·  {dn.phone_system.name}",
+                    "kind": "dn_orphan",
+                    "phone_system_id": str(dn.phone_system_id),
+                    "phone_system_name": dn.phone_system.name,
+                    "starting_css_id": "",
+                    "starting_css_name": "",
+                    "disabled": True,
+                })
+                continue
+            for ph in holders_list:
+                css_id, css_name = self._derive_phone_css(ph)
+                out.append({
+                    "id": f"phone:{ph.pk}",
+                    "text": f"📋 {dn.extension} → {ph.device_name}  "
+                            f"({dn.partition.name})  ·  {ph.phone_system.name}",
+                    "kind": "dn_via_phone",
+                    "phone_system_id": str(ph.phone_system_id),
+                    "phone_system_name": ph.phone_system.name,
+                    "starting_css_id": css_id,
+                    "starting_css_name": css_name,
+                })
+        return out
+
+    def _search_trunks(self, q):
+        qs = (
+            models.Trunk.objects
+            .select_related("phone_system", "inbound_css")
+            .filter(name__icontains=q)[: self.PER_KIND_LIMIT]
+        )
+        out = []
+        for tr in qs:
+            css_id = str(tr.inbound_css_id) if tr.inbound_css_id else ""
+            css_name = tr.inbound_css.name if tr.inbound_css_id else ""
+            out.append({
+                "id": f"trunk:{tr.pk}",
+                "text": f"🔌 {tr.name}  ·  inbound: {css_name or '(none)'}  "
+                        f"·  {tr.phone_system.name}",
+                "kind": "trunk",
+                "phone_system_id": str(tr.phone_system_id),
+                "phone_system_name": tr.phone_system.name,
+                "starting_css_id": css_id,
+                "starting_css_name": css_name,
+            })
+        return out
+
+    @staticmethod
+    def _derive_phone_css(phone):
+        """Return ``(css_id, css_name)`` for the phone's vendor CSS, or
+        ``("", "")`` if the vendor_extras key is absent or doesn't
+        resolve to a CSS in the same phone_system."""
+        extras = phone.vendor_extras or {}
+        css_name = extras.get("callingSearchSpaceName") or ""
+        if not css_name:
+            return "", ""
+        css = (
+            models.CallingSearchSpace.objects
+            .filter(phone_system=phone.phone_system, name=css_name)
+            .first()
+        )
+        if css is None:
+            return "", css_name  # Surface the name so operator sees the mismatch.
+        return str(css.pk), css.name
