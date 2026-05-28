@@ -9,6 +9,7 @@ The engine is pure-Python; tests are DB-touching but small (1-5
 records per fixture).
 """
 
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
 from nautobot_phones import models
@@ -256,7 +257,10 @@ class TestTraceRoutePattern(_DialPlanFixtureMixin, TestCase):
         self.assertEqual(steps[-1].subject, "SIP-OUTBOUND")
         self.assertIn("203.0.113.10", steps[-1].summary)
 
-    def test_pattern_matches_route_list_egress(self) -> None:
+    def test_pattern_matches_route_list_egress_empty_list(self) -> None:
+        """RouteList with no member groups — egress chase emits a
+        ``likely_egress`` step explaining the call has nowhere to go.
+        This is the classic CCM "blackhole" pattern (intentional drop)."""
         rl = models.RouteList.objects.create(
             name="PrimaryRL", phone_system=self.ps,
         )
@@ -269,8 +273,10 @@ class TestTraceRoutePattern(_DialPlanFixtureMixin, TestCase):
         )
         self.assertEqual(
             _step_kinds(steps),
-            ["css", "partition_check", "route_pattern_match", "route_list_egress"],
+            ["css", "partition_check", "route_pattern_match",
+             "route_list_egress", "likely_egress"],
         )
+        self.assertIn("no member RouteGroups", steps[-1].summary)
         self.assertEqual(steps[-1].subject, "PrimaryRL")
 
     def test_pattern_matches_target_dn(self) -> None:
@@ -498,3 +504,183 @@ class TestTraceSpecificityWins(_DialPlanFixtureMixin, TestCase):
         # DN match wins.
         self.assertEqual(steps[-1].kind, "dn_match")
         self.assertEqual(steps[-1].subject, "1001")
+
+
+class TestTraceRouteListEgressChase(_DialPlanFixtureMixin, TestCase):
+    """RouteList egress chase — walking RouteList → RouteGroup → Trunk."""
+
+    def _make_routed_pattern(self, route_list):
+        """Wire a RoutePattern in this partition at the given route list."""
+        return models.RoutePattern.objects.create(
+            pattern="9.!", partition=self.partition,
+            target_route_list=route_list,
+        )
+
+    def test_single_group_single_trunk(self) -> None:
+        rl = models.RouteList.objects.create(name="PrimaryRL", phone_system=self.ps)
+        rg = models.RouteGroup.objects.create(
+            name="PrimaryRG", phone_system=self.ps, distribution_algorithm="top_down",
+        )
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg, priority=1,
+        )
+        trunk = models.Trunk.objects.create(
+            name="SIP-OUT", phone_system=self.ps, trunk_type="sip",
+            destination_address="198.51.100.10",
+        )
+        ct = ContentType.objects.get_for_model(models.Trunk)
+        models.RouteGroupMember.objects.create(
+            route_group=rg, target_type=ct, target_id=trunk.pk, priority=1,
+        )
+        self._make_routed_pattern(rl)
+
+        steps = trace(
+            phone_system=self.ps, starting_css=self.css, dialed_digits="95551234",
+        )
+        self.assertEqual(
+            _step_kinds(steps),
+            ["css", "partition_check", "route_pattern_match",
+             "route_list_egress", "route_group_select", "likely_egress"],
+        )
+        # The route_group_select step's extras lists the trunk.
+        rg_step = steps[-2]
+        self.assertEqual(len(rg_step.extras["members"]), 1)
+        self.assertEqual(rg_step.extras["members"][0]["name"], "SIP-OUT")
+        self.assertEqual(rg_step.extras["members"][0]["type"], "trunk")
+        # The likely_egress step names the trunk.
+        self.assertIn("SIP-OUT", steps[-1].summary)
+        self.assertIn("198.51.100.10", steps[-1].summary)
+
+    def test_multiple_groups_in_priority_order(self) -> None:
+        rl = models.RouteList.objects.create(name="PrimaryRL", phone_system=self.ps)
+        rg_primary = models.RouteGroup.objects.create(
+            name="Primary", phone_system=self.ps, distribution_algorithm="top_down",
+        )
+        rg_backup = models.RouteGroup.objects.create(
+            name="Backup", phone_system=self.ps, distribution_algorithm="top_down",
+        )
+        # Insert backup at priority 2, primary at priority 1 — check ordering.
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg_backup, priority=2,
+        )
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg_primary, priority=1,
+        )
+        ct = ContentType.objects.get_for_model(models.Trunk)
+        primary_trunk = models.Trunk.objects.create(
+            name="Primary-Trunk", phone_system=self.ps, trunk_type="sip",
+            destination_address="198.51.100.10",
+        )
+        backup_trunk = models.Trunk.objects.create(
+            name="Backup-Trunk", phone_system=self.ps, trunk_type="sip",
+            destination_address="198.51.100.20",
+        )
+        models.RouteGroupMember.objects.create(
+            route_group=rg_primary, target_type=ct, target_id=primary_trunk.pk,
+            priority=1,
+        )
+        models.RouteGroupMember.objects.create(
+            route_group=rg_backup, target_type=ct, target_id=backup_trunk.pk,
+            priority=1,
+        )
+        self._make_routed_pattern(rl)
+
+        steps = trace(
+            phone_system=self.ps, starting_css=self.css, dialed_digits="95551234",
+        )
+        # Two route_group_select steps: Primary then Backup.
+        self.assertEqual(
+            _step_kinds(steps),
+            ["css", "partition_check", "route_pattern_match",
+             "route_list_egress", "route_group_select", "route_group_select",
+             "likely_egress"],
+        )
+        self.assertEqual(steps[4].subject, "Primary")
+        self.assertEqual(steps[5].subject, "Backup")
+        # Likely egress = top-priority group's top-priority trunk.
+        self.assertIn("Primary-Trunk", steps[-1].summary)
+
+    def test_group_with_multiple_trunks_ordered(self) -> None:
+        rl = models.RouteList.objects.create(name="PrimaryRL", phone_system=self.ps)
+        rg = models.RouteGroup.objects.create(
+            name="LoadBalanced", phone_system=self.ps, distribution_algorithm="circular",
+        )
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg, priority=1,
+        )
+        ct = ContentType.objects.get_for_model(models.Trunk)
+        for i, addr in enumerate(("198.51.100.10", "198.51.100.20", "198.51.100.30")):
+            trunk = models.Trunk.objects.create(
+                name=f"Trunk-{i}", phone_system=self.ps, trunk_type="sip",
+                destination_address=addr,
+            )
+            models.RouteGroupMember.objects.create(
+                route_group=rg, target_type=ct, target_id=trunk.pk,
+                priority=i + 1,
+            )
+        self._make_routed_pattern(rl)
+
+        steps = trace(
+            phone_system=self.ps, starting_css=self.css, dialed_digits="95551234",
+        )
+        rg_step = next(s for s in steps if s.kind == "route_group_select")
+        # All three trunks listed in priority order.
+        names = [m["name"] for m in rg_step.extras["members"]]
+        self.assertEqual(names, ["Trunk-0", "Trunk-1", "Trunk-2"])
+        # likely_egress names the priority-1 trunk.
+        self.assertIn("Trunk-0", steps[-1].summary)
+
+    def test_group_with_no_members(self) -> None:
+        """RouteList → RouteGroup → (no trunks). The chase still emits a
+        route_group_select step but the likely_egress reports there are
+        no actual targets."""
+        rl = models.RouteList.objects.create(name="EmptyRL", phone_system=self.ps)
+        rg = models.RouteGroup.objects.create(
+            name="EmptyRG", phone_system=self.ps, distribution_algorithm="top_down",
+        )
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg, priority=1,
+        )
+        self._make_routed_pattern(rl)
+
+        steps = trace(
+            phone_system=self.ps, starting_css=self.css, dialed_digits="95551234",
+        )
+        self.assertEqual(
+            _step_kinds(steps),
+            ["css", "partition_check", "route_pattern_match",
+             "route_list_egress", "route_group_select", "likely_egress"],
+        )
+        # Empty member list rendered as no members.
+        rg_step = steps[-2]
+        self.assertEqual(rg_step.extras["members"], [])
+        self.assertIn("none contain any Trunks/Gateways", steps[-1].summary)
+
+    def test_group_with_analog_gateway_member(self) -> None:
+        """RouteGroupMember GFK can point at an AnalogGateway — the
+        polymorphic member listing must surface the right type label."""
+        rl = models.RouteList.objects.create(name="GW-RL", phone_system=self.ps)
+        rg = models.RouteGroup.objects.create(
+            name="GW-RG", phone_system=self.ps, distribution_algorithm="top_down",
+        )
+        models.RouteListMember.objects.create(
+            route_list=rl, route_group=rg, priority=1,
+        )
+        gw = models.AnalogGateway.objects.create(
+            name="VG450-01", phone_system=self.ps, protocol="mgcp",
+        )
+        ct = ContentType.objects.get_for_model(models.AnalogGateway)
+        models.RouteGroupMember.objects.create(
+            route_group=rg, target_type=ct, target_id=gw.pk, priority=1,
+        )
+        self._make_routed_pattern(rl)
+
+        steps = trace(
+            phone_system=self.ps, starting_css=self.css, dialed_digits="95551234",
+        )
+        rg_step = next(s for s in steps if s.kind == "route_group_select")
+        self.assertEqual(rg_step.extras["members"][0]["type"], "analoggateway")
+        self.assertEqual(rg_step.extras["members"][0]["name"], "VG450-01")
+        # likely_egress should describe the gateway, not assume it's a trunk.
+        self.assertIn("analoggateway", steps[-1].summary)
+        self.assertIn("VG450-01", steps[-1].summary)

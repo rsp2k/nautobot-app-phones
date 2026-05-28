@@ -78,8 +78,17 @@ class TraceStep:
     * ``"hunt_pilot_match"`` — HuntPilot matched; trace enters hunt subsystem
     * ``"hunt_subsystem"`` — within the hunt subsystem, the line groups
       and DNs that will be tried in order
-    * ``"trunk_egress"`` — call leaves via a Trunk; terminal step
-    * ``"route_list_egress"`` — call routes through a RouteList; terminal
+    * ``"trunk_egress"`` — call leaves directly via a Trunk (RoutePattern
+      points at one); terminal step
+    * ``"route_list_egress"`` — call enters a RouteList; the egress chase
+      then continues with ``route_group_select`` step(s)
+    * ``"route_group_select"`` — within a RouteList, one RouteGroup is
+      being attempted (in priority order). ``extras["members"]`` lists
+      its targets (Trunks / AnalogGateways) in their own priority order.
+    * ``"likely_egress"`` — best-effort hint at the *first* target that
+      would actually carry the call (top-priority member of the
+      top-priority RouteGroup). Not authoritative — real CCM evaluates
+      circuit availability and time-of-day routing at runtime.
     * ``"no_match"`` — no pattern matched in any visited partition;
       caller hears reorder/unreachable
     * ``"recursion_limit"`` — translation chain exceeded MAX_TRANSLATION_DEPTH
@@ -323,6 +332,7 @@ def trace(
                 subject=obj.target_route_list.name,
                 detail_url=obj.target_route_list.get_absolute_url() if hasattr(obj.target_route_list, "get_absolute_url") else "",
             ))
+            steps.extend(_walk_route_list(obj.target_route_list))
         elif obj.target_trunk_id is not None:
             steps.append(TraceStep(
                 kind="route_pattern_match",
@@ -506,3 +516,107 @@ def _apply_translation(tp: TranslationPattern, dialed: str) -> str:
         out = prefix + out
 
     return out
+
+
+def _walk_route_list(route_list) -> list[TraceStep]:
+    """Continue an egress trace from a RouteList through its RouteGroups
+    and their members (Trunks / AnalogGateways).
+
+    Returns the new steps to append to the trace — does NOT include the
+    prior ``route_list_egress`` header step (the caller already emitted
+    that). Steps emitted, in order:
+
+    * One ``route_group_select`` per RouteListMember, in ``priority``
+      order. Each step's ``extras["members"]`` is a list of dicts
+      describing each RouteGroupMember target (Trunk or AnalogGateway).
+    * One terminal ``likely_egress`` step naming the top-priority target
+      in the top-priority RouteGroup — or, if the list is empty,
+      explaining that the call has nowhere to go (blackhole pattern).
+
+    We deliberately stop at the *first* target. A real CCM evaluates
+    each candidate in turn against circuit availability and we can't
+    know that from a static snapshot, so naming a single "likely first
+    egress attempt" is the most honest claim the trace can make.
+    """
+    steps: list[TraceStep] = []
+    memberships = list(
+        route_list.memberships.select_related("route_group").order_by("priority")
+    )
+    if not memberships:
+        # Empty route list — classic CCM "blackhole" pattern. The call
+        # matched a route pattern, hit the list, and the list has no
+        # available group → reorder tone.
+        steps.append(TraceStep(
+            kind="likely_egress",
+            summary=f"RouteList {route_list.name!r} has no member RouteGroups — "
+                    f"call has nowhere to egress (blackhole / reorder)",
+            subject=route_list.name,
+            detail_url=route_list.get_absolute_url() if hasattr(route_list, "get_absolute_url") else "",
+        ))
+        return steps
+
+    likely_target = None
+    likely_target_kind = ""
+    for rlm in memberships:
+        rg = rlm.route_group
+        # Walk the through-table directly so we get the priority field
+        # without needing two queries per member.
+        members = list(rg.members.order_by("priority"))
+        member_extras = []
+        for rgm in members:
+            target = rgm.target  # GFK — Trunk or AnalogGateway
+            if target is None:
+                member_extras.append({
+                    "name": "(missing)",
+                    "type": rgm.target_type.model if rgm.target_type_id else "unknown",
+                    "priority": rgm.priority,
+                    "address": "",
+                    "detail_url": "",
+                })
+                continue
+            member_extras.append({
+                "name": target.name,
+                "type": rgm.target_type.model,
+                "priority": rgm.priority,
+                "address": getattr(target, "destination_address", "") or "",
+                "detail_url": target.get_absolute_url() if hasattr(target, "get_absolute_url") else "",
+            })
+        steps.append(TraceStep(
+            kind="route_group_select",
+            summary=(
+                f"RouteGroup {rg.name!r} (list priority {rlm.priority}, "
+                f"algorithm {rg.distribution_algorithm or '—'}): "
+                f"{len(members)} member(s)"
+            ),
+            subject=rg.name,
+            detail_url=rg.get_absolute_url() if hasattr(rg, "get_absolute_url") else "",
+            extras={"members": member_extras},
+        ))
+        # Record the first (highest priority) target across the whole walk
+        # — that's the "first attempt" call path.
+        if likely_target is None and member_extras:
+            first = member_extras[0]
+            likely_target = first
+            likely_target_kind = first["type"]
+
+    if likely_target is None:
+        steps.append(TraceStep(
+            kind="likely_egress",
+            summary=f"RouteList {route_list.name!r} has groups but none contain "
+                    f"any Trunks/Gateways — call has nowhere to egress",
+            subject=route_list.name,
+            detail_url=route_list.get_absolute_url() if hasattr(route_list, "get_absolute_url") else "",
+        ))
+    else:
+        addr = f" ({likely_target['address']})" if likely_target["address"] else ""
+        steps.append(TraceStep(
+            kind="likely_egress",
+            summary=(
+                f"First egress attempt: {likely_target_kind} "
+                f"{likely_target['name']!r}{addr}. Actual selection at "
+                f"runtime depends on circuit availability and routing policy."
+            ),
+            subject=likely_target["name"],
+            detail_url=likely_target["detail_url"],
+        ))
+    return steps

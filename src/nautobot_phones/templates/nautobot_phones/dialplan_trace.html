@@ -117,6 +117,10 @@
                 <span class="mdi mdi-transit-connection-variant"></span>
               {% elif step.kind == 'route_list_egress' %}
                 <span class="mdi mdi-source-branch"></span>
+              {% elif step.kind == 'route_group_select' %}
+                <span class="mdi mdi-arrow-decision"></span>
+              {% elif step.kind == 'likely_egress' %}
+                <span class="mdi mdi-exit-run"></span>
               {% elif step.kind == 'no_match' %}
                 <span class="mdi mdi-phone-cancel"></span>
               {% elif step.kind == 'recursion_limit' %}
@@ -161,6 +165,27 @@
                   Re-enter trace with
                   <code>{{ step.extras.new_digits }}</code>
                 </div>
+              {% endif %}
+              {% if step.kind == 'route_group_select' and step.extras.members %}
+                <ul class="dpt-hunt-dns">
+                  {% for m in step.extras.members %}
+                    <li>
+                      {% if m.detail_url %}
+                        <a href="{{ m.detail_url }}">
+                          <code>{{ m.name }}</code>
+                          <span class="mdi mdi-open-in-new" aria-hidden="true"></span>
+                        </a>
+                      {% else %}
+                        <code>{{ m.name }}</code>
+                      {% endif %}
+                      <span class="dpt-hunt-dn-partition">({{ m.type }})</span>
+                      {% if m.address %}
+                        <span class="dpt-hunt-dn-partition">&rarr; {{ m.address }}</span>
+                      {% endif %}
+                      <span class="dpt-hunt-dn-order">priority {{ m.priority }}</span>
+                    </li>
+                  {% endfor %}
+                </ul>
               {% endif %}
             </div>
           </li>
