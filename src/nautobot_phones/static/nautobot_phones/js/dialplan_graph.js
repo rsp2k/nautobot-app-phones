@@ -41,12 +41,32 @@
   const infoKind = infoPane.querySelector(".dpg-info-kind");
   const infoExtras = infoPane.querySelector(".dpg-info-extras");
   const infoLink = document.getElementById("dpg-info-link");
+  const dialedInput = document.getElementById("dpg-dialed");
+  const tracePane = document.getElementById("dpg-trace");
+  const traceList = tracePane ? tracePane.querySelector(".dpg-trace-steps") : null;
+  const traceCount = tracePane ? tracePane.querySelector(".dpg-trace-count") : null;
 
   let state = {
     anchor: root.dataset.initialAnchor || "",
     direction: root.dataset.initialDirection || "forward",
+    dialed: (dialedInput && dialedInput.value) || "",
     cy: null,
   };
+
+  // ---- Dial input — debounced, re-fetches the graph with trace overlay ----
+
+  if (dialedInput) {
+    let dialedTimer = null;
+    dialedInput.addEventListener("input", () => {
+      clearTimeout(dialedTimer);
+      // 300ms debounce — operators type and pause, we don't want to fire
+      // a graph rebuild for every keystroke.
+      dialedTimer = setTimeout(() => {
+        state.dialed = dialedInput.value.trim();
+        reloadGraph();
+      }, 300);
+    });
+  }
 
   // ---- Anchor autocomplete -----------------------------------------------
 
@@ -136,8 +156,12 @@
       renderEmpty("Pick an anchor above to render the graph.");
       return;
     }
-    const url = `${dataUrl}?anchor=${encodeURIComponent(state.anchor)}` +
-                `&direction=${encodeURIComponent(state.direction)}`;
+    const params = new URLSearchParams({
+      anchor: state.anchor,
+      direction: state.direction,
+    });
+    if (state.dialed) params.set("dialed_digits", state.dialed);
+    const url = `${dataUrl}?${params.toString()}`;
     fetch(url, {credentials: "same-origin",
                 headers: {"Accept": "application/json"}})
       .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
@@ -179,11 +203,85 @@
       if (evt.target === state.cy) infoPane.hidden = true;
     });
     // Layout is async — fit AFTER it finishes, otherwise we fit on a
-    // collapsed/zero-size graph (default layout ran before our nodes
-    // got their final positions from dagre).
+    // collapsed/zero-size graph.
     const layout = state.cy.layout(dagreLayout());
-    layout.one("layoutstop", () => state.cy.fit(undefined, 40));
+    layout.one("layoutstop", () => {
+      // Apply trace overlay *after* layout, so the highlighted nodes
+      // sit at their final positions when we zoom-fit to them.
+      applyTraceOverlay(data.meta);
+      state.cy.fit(undefined, 40);
+    });
     layout.run();
+  }
+
+  function applyTraceOverlay(meta) {
+    // No trace = unhighlighted topology; clear any prior trace state.
+    if (!meta || !meta.has_trace || !meta.trace_steps) {
+      if (tracePane) tracePane.hidden = true;
+      // Strip in-trace / dimmed classes (no-op on fresh cy, matters on
+      // re-render after dial was set then cleared).
+      if (state.cy) {
+        state.cy.elements().removeClass("in-trace dimmed trace-step-head trace-step-tail");
+      }
+      return;
+    }
+    const cy = state.cy;
+    // Mark nodes that appear in the trace.
+    cy.nodes('[step_index >= 0]').addClass("in-trace");
+    // The head node (step 0) and the terminal step get extra emphasis.
+    cy.nodes('[step_index = 0]').addClass("trace-step-head");
+    const lastIdx = (meta.trace_steps[meta.trace_steps.length - 1] || {}).index;
+    if (typeof lastIdx === "number") {
+      cy.nodes(`[step_index = ${lastIdx}]`).addClass("trace-step-tail");
+    }
+    // Dim everything NOT in the trace so the path pops visually.
+    cy.elements().difference(cy.nodes(".in-trace")).addClass("dimmed");
+    // Highlight edges connecting consecutive in-trace nodes — operators
+    // immediately see "this edge is on the call's path."
+    cy.edges().forEach((e) => {
+      const s = e.source().data("step_index");
+      const t = e.target().data("step_index");
+      if (typeof s === "number" && typeof t === "number") {
+        e.removeClass("dimmed");
+        e.addClass("in-trace");
+      }
+    });
+    renderTracePanel(meta.trace_steps);
+  }
+
+  function renderTracePanel(steps) {
+    if (!tracePane || !traceList) return;
+    tracePane.hidden = false;
+    traceCount.textContent = `${steps.length} steps`;
+    traceList.innerHTML = "";
+    steps.forEach((step) => {
+      const li = document.createElement("li");
+      li.className = `dpg-trace-step dpg-trace-kind-${step.kind}`;
+      li.dataset.nodeId = step.node_id || "";
+      const kindLabel = step.kind.replace(/_/g, " ");
+      li.innerHTML = `
+        <div class="dpg-trace-step-kind">${esc(kindLabel)}</div>
+        <div class="dpg-trace-step-summary">${esc(step.summary || "")}</div>
+        ${step.subject ? `<code class="dpg-trace-step-subject">${esc(step.subject)}</code>` : ""}
+      `;
+      if (step.node_id) {
+        li.addEventListener("click", () => focusNode(step.node_id));
+        li.classList.add("dpg-trace-clickable");
+      }
+      traceList.appendChild(li);
+    });
+  }
+
+  function focusNode(nodeId) {
+    if (!state.cy) return;
+    const node = state.cy.getElementById(nodeId);
+    if (!node || !node.length) return;
+    state.cy.animate({
+      center: {eles: node},
+      zoom: Math.max(0.8, state.cy.zoom()),
+    }, {duration: 250});
+    // Briefly pulse — visual confirmation the step is "here."
+    node.flashClass("trace-pulse", 800);
   }
 
   function dagreLayout() {
@@ -312,6 +410,51 @@
         "border-width": 4,
         "border-color": "#fff",
       }},
+      // -- Trace overlay --
+      // Dimmed = not on the trace path. Heavily de-emphasized so the
+      // path itself is what catches the eye.
+      {selector: ".dimmed", style: {
+        "opacity": 0.18,
+        "text-opacity": 0.4,
+      }},
+      // In-trace nodes get a bright halo and thicker border so they
+      // pop against the dimmed background. Cytoscape's ``overlay-*``
+      // properties paint a colored disc behind the node — a poor
+      // man's drop shadow, but supported across all node shapes.
+      {selector: "node.in-trace", style: {
+        "border-width": 4,
+        "border-color": "#fbbf24",
+        "overlay-color": "#fbbf24",
+        "overlay-opacity": 0.25,
+        "overlay-padding": 6,
+      }},
+      // First/last trace nodes — different halo color so the "call
+      // origin → call destination" reads as a flow at a glance.
+      {selector: "node.trace-step-head", style: {
+        "border-color": "#22c55e",
+        "overlay-color": "#22c55e",
+        "overlay-opacity": 0.35,
+        "border-width": 5,
+      }},
+      {selector: "node.trace-step-tail", style: {
+        "border-color": "#ef4444",
+        "overlay-color": "#ef4444",
+        "overlay-opacity": 0.35,
+        "border-width": 5,
+      }},
+      // Edges between consecutive in-trace nodes — bright + thick so
+      // the call's path reads as a single visual flow.
+      {selector: "edge.in-trace", style: {
+        "line-color": "#fbbf24",
+        "target-arrow-color": "#fbbf24",
+        "width": 4,
+        "opacity": 1,
+      }},
+      // Side-panel click animation pulse — momentary highlight.
+      {selector: ".trace-pulse", style: {
+        "border-width": 8,
+        "border-color": "#fff",
+      }},
     ];
   }
 
@@ -340,6 +483,8 @@
     if (state.anchor) url.searchParams.set("anchor", state.anchor);
     else url.searchParams.delete("anchor");
     url.searchParams.set("direction", state.direction);
+    if (state.dialed) url.searchParams.set("dialed_digits", state.dialed);
+    else url.searchParams.delete("dialed_digits");
     window.history.replaceState({}, "", url);
   }
 

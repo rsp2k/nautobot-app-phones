@@ -29,10 +29,67 @@ overflows the screen for real LAB-CCM data.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from nautobot_phones import models
+
+
+# UUID regex — matches the standard hex+dash form Nautobot uses everywhere.
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+
+# Maps TraceStep.kind → graph node-id prefix. Steps with kind not in this
+# map are terminal/non-mappable (no_match, recursion_limit) — they don't
+# correspond to a specific graph node so we skip them when overlaying.
+_STEP_KIND_TO_NODE_PREFIX = {
+    "css": "css",
+    "partition_check": "partition",
+    "dn_match": "dn",
+    "route_pattern_match": "pattern",
+    "translation_match": "translation",
+    "hunt_pilot_match": "hunt_pilot",
+    "hunt_subsystem": "hunt_list",      # closest graph node for hunt expansion
+    "trunk_egress": "trunk",
+    "route_list_egress": "route_list",
+    "route_group_select": "route_group",
+    # likely_egress is special: it can resolve to either a trunk or a
+    # route_list depending on whether the list had any members. We pick
+    # the prefix by inspecting the detail_url path slug — handled in
+    # _trace_step_to_node_id() below rather than via this static map.
+}
+
+
+def trace_step_to_node_id(step) -> Optional[str]:
+    """Map a TraceStep to the matching graph-node id, or None if the
+    step doesn't correspond to a single node (terminal kinds, etc.).
+
+    Works by combining a kind-derived prefix with the UUID extracted
+    from the step's ``detail_url``. Keeps the trace and graph layers
+    decoupled — the trace doesn't need to know about graph ids, and
+    the graph doesn't need to call back into the trace engine.
+    """
+    if step.kind in ("no_match", "recursion_limit"):
+        return None
+    prefix = _STEP_KIND_TO_NODE_PREFIX.get(step.kind)
+    if prefix is None:
+        # likely_egress — derive from URL slug.
+        if step.kind == "likely_egress":
+            if "/trunks/" in step.detail_url:
+                prefix = "trunk"
+            elif "/route-lists/" in step.detail_url:
+                prefix = "route_list"
+            else:
+                return None
+        else:
+            return None
+    match = _UUID_RE.search(step.detail_url or "")
+    if not match:
+        return None
+    return f"{prefix}:{match.group(0).lower()}"
 
 
 PATTERN_FANOUT_LIMIT = 8
@@ -92,7 +149,12 @@ class GraphEdge:
 # ---------------------------------------------------------------------------
 
 
-def build_graph(anchor_kind: str, anchor_id: str, direction: str) -> dict:
+def build_graph(
+    anchor_kind: str,
+    anchor_id: str,
+    direction: str,
+    trace_steps: Optional[list] = None,
+) -> dict:
     """Build a Cytoscape-shaped graph from the given anchor.
 
     Returns ``{"nodes": [...], "edges": [...], "meta": {...}}``. The
@@ -102,8 +164,29 @@ def build_graph(anchor_kind: str, anchor_id: str, direction: str) -> dict:
     Unknown anchor kinds or missing objects produce an empty graph
     rather than raising — the renderer surfaces "anchor not found" to
     the operator.
+
+    When ``trace_steps`` is supplied (a list from ``dialplan.trace()``),
+    the builder additionally:
+
+    * Annotates each graph node matching a trace step with
+      ``extras.step_index`` (zero-based position in the trace).
+    * Skips aggregation for DNs/TranslationPatterns that are *in* the
+      trace — so an aggregated supernode would otherwise hide the very
+      thing the trace points at, which would break the visual story.
+    * Emits ``meta.trace_steps`` as a serialized list for the side
+      panel to render (label, kind, summary, subject, detail_url,
+      and the resolved node_id for click-to-zoom).
     """
-    builder = _Builder()
+    # Compute trace-touched node ids upfront so the walker can decide
+    # whether to aggregate. Steps without a mappable node id (terminal
+    # kinds) get filtered out here.
+    trace_step_ids: list[Optional[str]] = []
+    if trace_steps:
+        for step in trace_steps:
+            trace_step_ids.append(trace_step_to_node_id(step))
+    touched_ids: set[str] = {nid for nid in trace_step_ids if nid}
+
+    builder = _Builder(touched_ids=touched_ids)
     if direction == "forward":
         if anchor_kind == "css":
             css = (
@@ -117,7 +200,9 @@ def build_graph(anchor_kind: str, anchor_id: str, direction: str) -> dict:
             builder.walk_css_forward(css)
             return builder.finalize(direction=direction,
                                     anchor_label=css.name,
-                                    anchor_kind="css")
+                                    anchor_kind="css",
+                                    trace_steps=trace_steps,
+                                    trace_step_ids=trace_step_ids)
         # Could add partition/trunk forward starts in a future pass.
         return builder.empty(anchor_kind, anchor_id, direction)
 
@@ -134,7 +219,9 @@ def build_graph(anchor_kind: str, anchor_id: str, direction: str) -> dict:
             builder.walk_trunk_backward(trunk)
             return builder.finalize(direction=direction,
                                     anchor_label=trunk.name,
-                                    anchor_kind="trunk")
+                                    anchor_kind="trunk",
+                                    trace_steps=trace_steps,
+                                    trace_step_ids=trace_step_ids)
         return builder.empty(anchor_kind, anchor_id, direction)
 
     return builder.empty(anchor_kind, anchor_id, direction)
@@ -146,10 +233,14 @@ def build_graph(anchor_kind: str, anchor_id: str, direction: str) -> dict:
 
 
 class _Builder:
-    def __init__(self):
+    def __init__(self, touched_ids: Optional[set[str]] = None):
         self._nodes: dict[str, GraphNode] = {}
         self._edges: list[GraphEdge] = []
         self._edge_seq = 0
+        # Trace-touched node ids — drives un-aggregation logic for
+        # DN/TranslationPattern leaves so the trace's path stays
+        # visually identifiable even when other siblings get bucketed.
+        self._touched_ids: set[str] = touched_ids or set()
 
     def empty(self, anchor_kind, anchor_id, direction):
         return {
@@ -164,7 +255,31 @@ class _Builder:
             },
         }
 
-    def finalize(self, *, direction, anchor_label, anchor_kind):
+    def finalize(self, *, direction, anchor_label, anchor_kind,
+                 trace_steps=None, trace_step_ids=None):
+        # Annotate nodes with their position in the trace, if any.
+        # Walking the trace_step_ids list rather than touched_ids
+        # preserves the ORDER (step 0, 1, 2…) which the renderer uses
+        # to color/number nodes by step position.
+        if trace_step_ids:
+            for idx, node_id in enumerate(trace_step_ids):
+                if node_id and node_id in self._nodes:
+                    self._nodes[node_id].extras["step_index"] = idx
+        # Serialize trace steps for the side panel, paired with the
+        # resolved node_id so click-to-zoom works.
+        trace_payload = None
+        if trace_steps:
+            trace_payload = []
+            for idx, step in enumerate(trace_steps):
+                nid = trace_step_ids[idx] if trace_step_ids else None
+                trace_payload.append({
+                    "index": idx,
+                    "kind": step.kind,
+                    "summary": step.summary,
+                    "subject": step.subject,
+                    "detail_url": step.detail_url,
+                    "node_id": nid,
+                })
         return {
             "nodes": [n.to_cyto() for n in self._nodes.values()],
             "edges": [e.to_cyto() for e in self._edges],
@@ -175,6 +290,8 @@ class _Builder:
                 "node_count": len(self._nodes),
                 "edge_count": len(self._edges),
                 "empty": False,
+                "trace_steps": trace_payload,
+                "has_trace": bool(trace_payload),
             },
         }
 
@@ -244,28 +361,44 @@ class _Builder:
         ~1400-DN cluster produces ~1500 nodes spanning >100K vertical
         pixels — unusable.
         """
-        # -- DNs: aggregate when count > 1 --
+        # -- DNs: aggregate when count > 1 (with un-aggregation for
+        # any DN the active trace touched, so the trace's visual path
+        # stays intact). --
         dns = list(models.DirectoryNumber.objects.filter(partition=partition))
-        if len(dns) == 1:
-            leaf = self._add_dn(dns[0])
+        touched_dns = [d for d in dns if f"dn:{d.pk}" in self._touched_ids]
+        other_dns = [d for d in dns if f"dn:{d.pk}" not in self._touched_ids]
+        for dn in touched_dns:
+            leaf = self._add_dn(dn)
             self.add_edge(partition_node_id, leaf,
-                          label=dns[0].extension, kind="dn")
-        elif len(dns) > 1:
+                          label=dn.extension, kind="dn")
+        if len(other_dns) == 1 and not touched_dns:
+            # No trace, single DN — render individually.
+            leaf = self._add_dn(other_dns[0])
+            self.add_edge(partition_node_id, leaf,
+                          label=other_dns[0].extension, kind="dn")
+        elif len(other_dns) >= 1:
+            # Aggregate the remainder (or the whole bucket if no trace).
+            # Use a stable id so the renderer doesn't duplicate.
             agg_id = f"dn_agg:{partition.pk}"
+            label = (f"{len(other_dns)} DNs" if not touched_dns
+                     else f"+ {len(other_dns)} other DNs")
             self.add_node(GraphNode(
                 id=agg_id,
-                label=f"{len(dns)} DNs",
+                label=label,
                 kind="dn",
-                detail_url=_url(partition),  # click → partition detail
-                extras={"aggregated": True, "count": len(dns)},
+                detail_url=_url(partition),
+                extras={"aggregated": True, "count": len(other_dns)},
             ))
             self.add_edge(partition_node_id, agg_id,
-                          label=f"{len(dns)} DNs", kind="dn")
+                          label=label, kind="dn")
 
-        # -- TranslationPatterns: aggregate when count > 1 --
+        # -- TranslationPatterns: same un-aggregation logic --
         translations = list(models.TranslationPattern.objects.filter(partition=partition))
-        if len(translations) == 1:
-            tp = translations[0]
+        touched_tps = [t for t in translations
+                       if f"translation:{t.pk}" in self._touched_ids]
+        other_tps = [t for t in translations
+                     if f"translation:{t.pk}" not in self._touched_ids]
+        for tp in touched_tps:
             tp_id = self.add_node(GraphNode(
                 id=f"translation:{tp.pk}",
                 label=tp.pattern,
@@ -275,18 +408,30 @@ class _Builder:
             ))
             self.add_edge(partition_node_id, tp_id,
                           label=tp.pattern, kind="translation")
-        elif len(translations) > 1:
+        if len(other_tps) == 1 and not touched_tps:
+            tp = other_tps[0]
+            tp_id = self.add_node(GraphNode(
+                id=f"translation:{tp.pk}",
+                label=tp.pattern,
+                kind="translation",
+                detail_url=_url(tp),
+                extras={"summary": f"rewrites → {tp.called_party_transformation_mask or '(via prefix)'}"},
+            ))
+            self.add_edge(partition_node_id, tp_id,
+                          label=tp.pattern, kind="translation")
+        elif len(other_tps) >= 1:
             agg_id = f"translation_agg:{partition.pk}"
+            label = (f"{len(other_tps)} TransPatterns" if not touched_tps
+                     else f"+ {len(other_tps)} other TransPatterns")
             self.add_node(GraphNode(
                 id=agg_id,
-                label=f"{len(translations)} TransPatterns",
+                label=label,
                 kind="translation",
                 detail_url=_url(partition),
-                extras={"aggregated": True, "count": len(translations)},
+                extras={"aggregated": True, "count": len(other_tps)},
             ))
             self.add_edge(partition_node_id, agg_id,
-                          label=f"{len(translations)} translations",
-                          kind="translation")
+                          label=label, kind="translation")
 
         # -- RoutePatterns: individual nodes, fanout-capped --
         route_patterns = list(

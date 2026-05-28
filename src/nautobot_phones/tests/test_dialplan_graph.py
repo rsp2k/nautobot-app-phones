@@ -311,3 +311,230 @@ class DialPlanGraphViewTests(_GraphFixtureMixin, TestCase):
         })
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.json()["meta"]["empty"])
+
+
+# ---------------------------------------------------------------------------
+# Trace overlay — bridges dialplan.trace() + build_graph()
+# ---------------------------------------------------------------------------
+
+
+class TraceStepToNodeIdTests(TestCase):
+    """Pure-function mapping from TraceStep → graph node id."""
+
+    def _step(self, kind, url):
+        from nautobot_phones.dialplan import TraceStep
+        return TraceStep(kind=kind, summary="x", subject="y", detail_url=url)
+
+    def test_css_step_maps_to_css_node(self):
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        nid = trace_step_to_node_id(self._step(
+            "css", "/plugins/phones/calling-search-spaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/"
+        ))
+        self.assertEqual(nid, "css:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+    def test_partition_check_maps_to_partition_node(self):
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        nid = trace_step_to_node_id(self._step(
+            "partition_check", "/plugins/phones/partitions/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/"
+        ))
+        self.assertEqual(nid, "partition:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    def test_route_pattern_maps_to_pattern_node(self):
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        nid = trace_step_to_node_id(self._step(
+            "route_pattern_match", "/plugins/phones/route-patterns/cccccccc-cccc-cccc-cccc-cccccccccccc/"
+        ))
+        self.assertEqual(nid, "pattern:cccccccc-cccc-cccc-cccc-cccccccccccc")
+
+    def test_no_match_step_returns_none(self):
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        nid = trace_step_to_node_id(self._step("no_match", ""))
+        self.assertIsNone(nid)
+
+    def test_likely_egress_derives_prefix_from_url(self):
+        """The 'likely_egress' kind can resolve to either a trunk or a
+        route_list depending on whether the list had members. Derive
+        from URL slug, not from a static map."""
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        # Empty route-list → likely_egress points at the route_list.
+        nid = trace_step_to_node_id(self._step(
+            "likely_egress", "/plugins/phones/route-lists/dddddddd-dddd-dddd-dddd-dddddddddddd/"
+        ))
+        self.assertEqual(nid, "route_list:dddddddd-dddd-dddd-dddd-dddddddddddd")
+        # Populated → likely_egress points at the trunk.
+        nid = trace_step_to_node_id(self._step(
+            "likely_egress", "/plugins/phones/trunks/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/"
+        ))
+        self.assertEqual(nid, "trunk:eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+
+    def test_url_without_uuid_returns_none(self):
+        from nautobot_phones.dialplan_graph import trace_step_to_node_id
+        nid = trace_step_to_node_id(self._step("css", "/plugins/phones/calling-search-spaces/"))
+        self.assertIsNone(nid)
+
+
+class BuildGraphWithTraceTests(_GraphFixtureMixin, TestCase):
+    """build_graph + trace_steps round-trip: matching nodes get
+    ``step_index`` annotations and the meta carries the step list."""
+
+    def setUp(self):
+        super().setUp()
+        # Bump existing partition memberships' priorities first to make
+        # room for a top-priority 911CER-PT (unique_together(css,
+        # priority) prevents two rows colliding at the same priority).
+        m1 = models.CSSPartitionMembership.objects.get(
+            css=self.css, partition=self.partition_dn,
+        )
+        m1.priority = 3
+        m1.save()
+        m2 = models.CSSPartitionMembership.objects.get(
+            css=self.css, partition=self.partition_pstn,
+        )
+        m2.priority = 4
+        m2.save()
+        # Add a 911 DN at the top of the priority list so the trace
+        # from Internal-CSS for "911" actually lands on it.
+        self.cer_pt = models.Partition.objects.create(
+            name="911CER-PT", phone_system=self.ps,
+        )
+        models.CSSPartitionMembership.objects.create(
+            css=self.css, partition=self.cer_pt, priority=1,
+        )
+        self.dn_911 = models.DirectoryNumber.objects.create(
+            extension="911", partition=self.cer_pt, phone_system=self.ps,
+        )
+
+    def _trace(self, digits):
+        from nautobot_phones import dialplan as dp_engine
+        return dp_engine.trace(
+            phone_system=self.ps,
+            starting_css=self.css,
+            dialed_digits=digits,
+        )
+
+    def test_trace_annotates_nodes_with_step_index(self):
+        from nautobot_phones.dialplan_graph import build_graph
+        steps = self._trace("911")
+        data = build_graph("css", str(self.css.pk), "forward",
+                           trace_steps=steps)
+        # CSS node = step 0
+        css_node = next(n for n in data["nodes"]
+                        if n["data"]["id"] == f"css:{self.css.pk}")
+        self.assertEqual(css_node["data"].get("step_index"), 0)
+        # The 911CER-PT partition + the DN should be present and
+        # annotated (their step_index depends on partition priority
+        # walking; we just verify they're > 0).
+        cer_node = next((n for n in data["nodes"]
+                         if n["data"]["id"] == f"partition:{self.cer_pt.pk}"), None)
+        self.assertIsNotNone(cer_node)
+        self.assertIn("step_index", cer_node["data"])
+        dn_node = next((n for n in data["nodes"]
+                        if n["data"]["id"] == f"dn:{self.dn_911.pk}"), None)
+        self.assertIsNotNone(dn_node)
+        self.assertIn("step_index", dn_node["data"])
+
+    def test_meta_carries_serialized_trace_steps(self):
+        from nautobot_phones.dialplan_graph import build_graph
+        steps = self._trace("911")
+        data = build_graph("css", str(self.css.pk), "forward",
+                           trace_steps=steps)
+        self.assertTrue(data["meta"]["has_trace"])
+        payload = data["meta"]["trace_steps"]
+        self.assertEqual(len(payload), len(steps))
+        # First step is the CSS — must be the same kind + carry the
+        # resolved node_id for the JS to use.
+        self.assertEqual(payload[0]["kind"], "css")
+        self.assertEqual(payload[0]["node_id"], f"css:{self.css.pk}")
+
+    def test_no_trace_no_annotation(self):
+        """When trace_steps is None, the graph is identical to the
+        plain topology (no step_index keys, has_trace=False)."""
+        from nautobot_phones.dialplan_graph import build_graph
+        data = build_graph("css", str(self.css.pk), "forward")
+        self.assertFalse(data["meta"]["has_trace"])
+        for n in data["nodes"]:
+            self.assertNotIn("step_index", n["data"])
+
+    def test_trace_unaggregates_touched_dn_when_other_dns_exist(self):
+        """If the trace lands on a DN inside a partition with many DNs,
+        the touched DN must render INDIVIDUALLY (so the highlight
+        works) even though siblings would normally aggregate."""
+        from nautobot_phones.dialplan_graph import build_graph
+        # Stuff the 911CER partition with extra non-911 DNs so it would
+        # otherwise aggregate.
+        for ext in ("9001", "9002", "9003", "9004", "9005"):
+            models.DirectoryNumber.objects.create(
+                extension=ext, partition=self.cer_pt, phone_system=self.ps,
+            )
+        steps = self._trace("911")
+        data = build_graph("css", str(self.css.pk), "forward",
+                           trace_steps=steps)
+        node_ids = {n["data"]["id"] for n in data["nodes"]}
+        # The 911 DN itself MUST appear individually.
+        self.assertIn(f"dn:{self.dn_911.pk}", node_ids,
+                      "trace-touched DN should not be aggregated away")
+        # Other 5 DNs still get an aggregate.
+        agg = [n for n in data["nodes"]
+               if n["data"]["id"] == f"dn_agg:{self.cer_pt.pk}"]
+        self.assertEqual(len(agg), 1)
+        self.assertIn("5 other", agg[0]["data"]["label"])
+
+
+class DialPlanGraphDataViewTraceTests(_GraphFixtureMixin, TestCase):
+    """The JSON endpoint accepts dialed_digits and overlays the trace."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.user)
+        self.client.defaults["SERVER_NAME"] = "localhost"
+        self.data_url = reverse("plugins:nautobot_phones:dialplan_graph_data")
+
+    def test_dialed_digits_runs_trace_and_overlays(self):
+        # 1001 is the DN in Internal-PT (from the fixture).
+        resp = self.client.get(self.data_url, {
+            "anchor": f"css:{self.css.pk}",
+            "direction": "forward",
+            "dialed_digits": "1001",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["meta"]["has_trace"])
+        self.assertGreaterEqual(len(data["meta"]["trace_steps"]), 1)
+
+    def test_no_dialed_digits_no_overlay(self):
+        resp = self.client.get(self.data_url, {
+            "anchor": f"css:{self.css.pk}",
+            "direction": "forward",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["meta"]["has_trace"])
+
+    def test_backward_with_dialed_uses_trunks_inbound_css(self):
+        """Backward + dialed_digits on a trunk with inbound_css set —
+        the trace runs from the inbound CSS, not from the trunk itself."""
+        # Set the trunk's inbound CSS.
+        self.trunk.inbound_css = self.css
+        self.trunk.save()
+        resp = self.client.get(self.data_url, {
+            "anchor": f"trunk:{self.trunk.pk}",
+            "direction": "backward",
+            "dialed_digits": "1001",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["meta"]["has_trace"])
+
+    def test_backward_with_no_inbound_css_degrades_gracefully(self):
+        """If the trunk has no inbound_css, trace can't run — graph
+        should still render, just without overlay."""
+        # self.trunk.inbound_css is unset by default.
+        resp = self.client.get(self.data_url, {
+            "anchor": f"trunk:{self.trunk.pk}",
+            "direction": "backward",
+            "dialed_digits": "1001",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["meta"]["empty"])  # graph still renders
+        self.assertFalse(data["meta"]["has_trace"])  # no overlay

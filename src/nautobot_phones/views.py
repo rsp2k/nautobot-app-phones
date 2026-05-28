@@ -1301,36 +1301,102 @@ class DialPlanGraphView(LoginRequiredMixin, View):
     def get(self, request):
         anchor = (request.GET.get("anchor") or "").strip()
         direction = (request.GET.get("direction") or "forward").strip()
+        dialed = (request.GET.get("dialed_digits") or "").strip()
         if direction not in ("forward", "backward"):
             direction = "forward"
         return render(request, self.template_name, {
             "initial_anchor": anchor,
             "initial_direction": direction,
+            "initial_dialed": dialed,
         })
 
 
 class DialPlanGraphDataView(LoginRequiredMixin, View):
     """JSON endpoint returning Cytoscape data for a given anchor.
 
-    Queries: ``?anchor=<kind>:<uuid>&direction=<forward|backward>``.
+    Queries:
+
+    * ``?anchor=<kind>:<uuid>&direction=<forward|backward>`` — pure
+      topology, no trace overlay.
+    * ``?...&dialed_digits=<digits>`` — additionally runs the trace
+      from the anchor CSS (forward) or the trunk's inbound CSS
+      (backward) and overlays it on the graph: matched nodes get a
+      ``step_index`` annotation, ``meta.trace_steps`` carries the
+      step list for the side panel renderer.
+
     Bad/missing anchor produces an empty graph payload (with
-    ``meta.empty=True``) rather than a 4xx — keeps the JS happy
-    path simple.
+    ``meta.empty=True``) rather than a 4xx — keeps the JS happy path
+    simple.
     """
 
     def get(self, request):
         from nautobot_phones.dialplan_graph import build_graph
         anchor = (request.GET.get("anchor") or "").strip()
         direction = (request.GET.get("direction") or "forward").strip()
+        dialed = (request.GET.get("dialed_digits") or "").strip()
         if direction not in ("forward", "backward"):
             direction = "forward"
         if ":" not in anchor:
             return JsonResponse({"nodes": [], "edges": [],
                                  "meta": {"empty": True, "direction": direction}})
         kind, _, pk = anchor.partition(":")
+        # Run the trace if the operator asked for one. Done outside
+        # build_graph() so a trace failure (bad anchor type, missing
+        # inbound CSS, etc.) silently degrades to pure topology rather
+        # than failing the whole graph request.
+        trace_steps = None
+        if dialed:
+            trace_steps = self._compute_trace(kind, pk, direction, dialed)
         try:
-            data = build_graph(kind, pk, direction)
+            data = build_graph(kind, pk, direction, trace_steps=trace_steps)
         except (ValueError, ValidationError):
             data = {"nodes": [], "edges": [],
                     "meta": {"empty": True, "direction": direction}}
         return JsonResponse(data)
+
+    @staticmethod
+    def _compute_trace(kind, pk, direction, dialed):
+        """Resolve the trace CSS from the anchor + run dialplan.trace().
+
+        For forward (CSS anchor), trace starts from the anchor itself.
+        For backward (trunk anchor), trace starts from the trunk's
+        ``inbound_css`` so the overlay represents "if a call landed on
+        this trunk dialing X, what would the dial plan do?"
+
+        Returns ``[]`` if the anchor doesn't have a usable trace CSS
+        (e.g. trunk with no inbound_css) — graph still renders, just
+        without overlay.
+        """
+        from nautobot_phones import dialplan as dp_engine
+        try:
+            if direction == "forward" and kind == "css":
+                css = (
+                    models.CallingSearchSpace.objects
+                    .filter(pk=pk)
+                    .select_related("phone_system")
+                    .first()
+                )
+                if css is None:
+                    return []
+                return dp_engine.trace(
+                    phone_system=css.phone_system,
+                    starting_css=css,
+                    dialed_digits=dialed,
+                )
+            if direction == "backward" and kind == "trunk":
+                trunk = (
+                    models.Trunk.objects
+                    .filter(pk=pk)
+                    .select_related("phone_system", "inbound_css")
+                    .first()
+                )
+                if trunk is None or trunk.inbound_css is None:
+                    return []
+                return dp_engine.trace(
+                    phone_system=trunk.phone_system,
+                    starting_css=trunk.inbound_css,
+                    dialed_digits=dialed,
+                )
+        except (ValueError, ValidationError):
+            return []
+        return []

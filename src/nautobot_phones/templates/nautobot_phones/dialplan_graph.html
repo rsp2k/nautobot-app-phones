@@ -41,9 +41,9 @@
           Pick a Calling Search Space (forward) or a Trunk (backward).
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label">Direction</label>
-        <div class="btn-group dpg-direction" role="group" aria-label="Graph direction">
+        <div class="btn-group dpg-direction w-100" role="group" aria-label="Graph direction">
           <button type="button" class="btn btn-outline-primary dpg-dir-btn"
                   data-dpg-dir="forward"
                   {% if initial_direction == 'forward' %}aria-pressed="true"{% endif %}>
@@ -58,14 +58,21 @@
           </button>
         </div>
       </div>
-      <div class="col-md-3 d-flex align-items-end gap-2">
-        <button type="button" class="btn btn-secondary" id="dpg-fit">
+      <div class="col-md-2">
+        <label class="form-label" for="dpg-dialed">Trace dial (optional)</label>
+        <input type="text" id="dpg-dialed" class="form-control"
+               value="{{ initial_dialed }}"
+               placeholder="e.g. 911">
+        <div class="form-text">Highlights the call's path.</div>
+      </div>
+      <div class="col-md-2 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-secondary" id="dpg-fit"
+                title="Fit graph to viewport">
           <span class="mdi mdi-fit-to-page" aria-hidden="true"></span>
-          Fit
         </button>
-        <button type="button" class="btn btn-secondary" id="dpg-relayout">
+        <button type="button" class="btn btn-secondary" id="dpg-relayout"
+                title="Re-run layout">
           <span class="mdi mdi-shuffle-variant" aria-hidden="true"></span>
-          Re-layout
         </button>
       </div>
     </div>
@@ -101,6 +108,19 @@
       Pick an anchor above to render the graph.
     </div>
   </div>
+
+  {% comment %}
+  Trace-steps side panel — populated when the data response includes
+  ?dialed_digits=. Sits to the right of the canvas; click a step and
+  the graph zooms to that node. Hidden until a trace is active.
+  {% endcomment %}
+  <aside id="dpg-trace" class="dpg-trace" hidden>
+    <div class="dpg-trace-header">
+      <strong>Trace steps</strong>
+      <span class="dpg-trace-count"></span>
+    </div>
+    <ol class="dpg-trace-steps"></ol>
+  </aside>
 
   {# Floating info pane — fills with clicked-node details #}
   <div id="dpg-info" class="dpg-info" hidden>
