@@ -6,6 +6,8 @@ call?"* step by step, the graph answers *"what is the **shape** of the
 dial plan around this anchor?"* as a single picture you can pan, zoom,
 and overlay traces on top of.
 
+![Dial-plan graph — forward topology from Internal-CSS, showing partitions in priority order, patterns, route lists, and trunks](../assets/screenshots/dialplan-graph-forward-topology.png)
+
 Operationally it pairs with the trace: when a service desk gets a
 ticket like "Alice can't dial 911," opening the graph at Alice's CSS
 with `911` in the trace-dial input shows both **the topology** and
@@ -95,6 +97,9 @@ trace touches** — see "Trace overlay" below.
 The graph really shines when paired with a trace. Type digits into the
 **Trace dial (optional)** input and the call path lights up on the
 topology:
+
+![Trace overlay — dialing 911 from Internal-CSS lights up the call path on the topology, with the trace step list rendered on the right](../assets/screenshots/dialplan-graph-trace-overlay.png)
+
 
 * **Yellow halo** on every node the call traverses
 * **Green halo** on the call origin (the CSS or trunk you anchored at)

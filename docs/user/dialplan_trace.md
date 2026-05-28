@@ -39,6 +39,8 @@ Type a phone name/MAC/description, DN extension, or trunk name into
 the autocomplete. Each result carries the derived `phone_system` and
 `starting_css` so submitting runs the trace without further clicks.
 
+![Endpoint mode — DN search '1300' resolves to the holder phone SEP0022EE194ACE, then 'Calling from' morphs into a per-line dropdown](../assets/screenshots/dialplan-trace-endpoint-mode.png)
+
 ```
 ┌─ [● By Endpoint] [○ Manual] ─┐
 │ 🔍 1300 → SEP0022EE194ACE   │
@@ -101,6 +103,9 @@ link to the underlying object. Step kinds:
 For RouteList-routed calls the trace continues past the
 `route_list_egress` step into per-RouteGroup expansion, then names a
 **likely first egress attempt** at the bottom. The "likely" phrasing
+
+![Annotated trace result — dialing +12085551234 from Internal-CSS walks 8 partitions, hits the \\+.@ pattern, enters Blackhole-RL, and terminates with 'no member RouteGroups — call has nowhere to egress'](../assets/screenshots/dialplan-trace-egress-chase.png)
+
 is deliberate: real CCM evaluates circuit availability and time-of-day
 routing at runtime, so the trace identifies the *first* candidate but
 won't claim to know which trunk actually carries the call.
@@ -151,6 +156,8 @@ inline-prefills and submits to the standalone view. Phone-side
 prefills the phone's vendor CSS; trunk-side prefills the trunk's
 `inbound_css`. Either way the result page is the same URL operators
 can paste into a ticket.
+
+![Trunk detail page — 'Trace inbound from this trunk' panel sits at the bottom with a CSS dropdown defaulting to the trunk's inbound_css](../assets/screenshots/dialplan-trace-trunk-panel.png)
 
 ## Not (yet) modeled
 
