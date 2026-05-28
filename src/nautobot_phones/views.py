@@ -11,7 +11,10 @@ DIDAssignment) don't have viewsets — they render nested in their parent's
 detail view via ObjectsTablePanel.
 """
 
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import render
 from django.utils.html import format_html
+from django.views.generic import View
 from nautobot.apps.ui import (
     ObjectDetailContent,
     ObjectFieldsPanel,
@@ -21,6 +24,7 @@ from nautobot.apps.ui import (
 )
 from nautobot.apps.views import NautobotUIViewSet
 
+from nautobot_phones import dialplan
 from nautobot_phones.heatmap import build_heatmap_data
 
 
@@ -52,6 +56,49 @@ class DIDHeatmapPanel(Panel):
 
     def render_body_content(self, context):
         """Merge heatmap data into context, then delegate to the template path."""
+        context.update(self.get_extra_context(context))
+        return super().render_body_content(context)
+
+
+class PhoneTracePanel(Panel):
+    """Inline 'Trace from this phone' panel on the Phone detail page.
+
+    Pre-fills the dial-plan trace form with this phone's calling
+    search space (read from ``vendor_extras.callingSearchSpaceName``,
+    which the CCM adapter populates for each phone). Operators type
+    digits, hit Trace, get a fresh trace page with the steps walked.
+
+    The form posts via GET to the standalone trace endpoint — keeps
+    the URL shareable so operators can drop a "trace from this phone
+    dialing X" link into a ticket or Slack message.
+    """
+
+    label = "Trace from this phone"
+    body_content_template_path = "nautobot_phones/inc/phone_trace_panel.html"
+
+    def get_extra_context(self, context):
+        """Pull the phone's CSS hint + the available CSS options.
+
+        The vendor_extras dict — populated by the CCM adapter at sync —
+        may carry ``callingSearchSpaceName`` (the AXL field). FreePBX
+        adapter doesn't currently emit this, so the panel falls back
+        to "pick any CSS in this phone_system" rather than guessing.
+        """
+        from nautobot_phones import models as ph_models  # local — avoid circular
+        ctx = super().get_extra_context(context) if hasattr(super(), "get_extra_context") else {}
+        phone = context.get("object")
+        if phone is None:
+            ctx["phone_css_options"] = []
+            return ctx
+        ctx["phone"] = phone
+        ctx["phone_css_options"] = ph_models.CallingSearchSpace.objects.filter(
+            phone_system=phone.phone_system,
+        ).order_by("name")
+        ve = getattr(phone, "vendor_extras", None) or {}
+        ctx["default_css_name"] = ve.get("callingSearchSpaceName") or ""
+        return ctx
+
+    def render_body_content(self, context):
         context.update(self.get_extra_context(context))
         return super().render_body_content(context)
 
@@ -493,6 +540,13 @@ class PhoneUIViewSet(NautobotUIViewSet):
                 table_title="Service URLs", exclude_columns=["phone"],
                 order_by_fields=["button_index"],
             ),
+            # "Trace from this phone" — full-width panel below the
+            # field panels. Inline form posts to the dial-plan trace
+            # endpoint with the phone's vendor_extras-derived CSS
+            # pre-selected.
+            PhoneTracePanel(
+                section=SectionChoices.FULL_WIDTH, weight=400,
+            ),
         ),
     )
 
@@ -913,3 +967,64 @@ class LineGroupUIViewSet(NautobotUIViewSet):
             ),
         ),
     )
+
+
+# --------------------------------------------------------------------------
+# Dial-plan trace visualizer
+# --------------------------------------------------------------------------
+
+class DialPlanTraceView(LoginRequiredMixin, View):
+    """Walk what happens when a pattern is dialed from a given CSS.
+
+    GET → blank form. POST → form + ordered list of trace steps. The
+    trace itself is computed by :func:`dialplan.trace` — pure-Python,
+    no DB writes. Operators reach this via the Phones tab nav or via
+    the "Trace from this phone" panel on a Phone detail page (which
+    pre-fills phone_system / starting_css).
+    """
+
+    template_name = "nautobot_phones/dialplan_trace.html"
+
+    def get(self, request):
+        initial = {}
+        if request.GET.get("phone_system"):
+            initial["phone_system"] = request.GET["phone_system"]
+        if request.GET.get("starting_css"):
+            initial["starting_css"] = request.GET["starting_css"]
+        if request.GET.get("dialed_digits"):
+            initial["dialed_digits"] = request.GET["dialed_digits"]
+        # If the user landed here with pre-filled GET params and digits,
+        # auto-run the trace (used by the phone-detail panel).
+        if initial.get("dialed_digits"):
+            form = forms.DialPlanTraceForm(data=initial)
+            if form.is_valid():
+                return self._render_trace(request, form)
+        return render(request, self.template_name, {
+            "form": forms.DialPlanTraceForm(initial=initial),
+            "trace_steps": None,
+        })
+
+    def post(self, request):
+        form = forms.DialPlanTraceForm(request.POST)
+        if not form.is_valid():
+            return render(request, self.template_name, {
+                "form": form, "trace_steps": None,
+            })
+        return self._render_trace(request, form)
+
+    def _render_trace(self, request, form):
+        """Compute the trace + render the result page."""
+        steps = dialplan.trace(
+            phone_system=form.cleaned_data["phone_system"],
+            starting_css=form.cleaned_data["starting_css"],
+            dialed_digits=form.cleaned_data["dialed_digits"],
+        )
+        return render(request, self.template_name, {
+            "form": form,
+            "trace_steps": steps,
+            "trace_input": {
+                "phone_system": form.cleaned_data["phone_system"],
+                "starting_css": form.cleaned_data["starting_css"],
+                "dialed_digits": form.cleaned_data["dialed_digits"],
+            },
+        })

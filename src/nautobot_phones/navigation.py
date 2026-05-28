@@ -161,6 +161,17 @@ menu_items = (
                         name="Calling Search Spaces",
                         permissions=["nautobot_phones.view_callingsearchspace"],
                     ),
+                    # Dial-plan trace visualizer — no model permissions
+                    # gate it (anyone who can view the dial plan can
+                    # trace it). Routed at /plugins/phones/dialplan-trace/.
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:dialplan_trace",
+                        name="Dial-plan Trace",
+                        permissions=[
+                            "nautobot_phones.view_partition",
+                            "nautobot_phones.view_callingsearchspace",
+                        ],
+                    ),
                 ),
             ),
         ),

@@ -1,0 +1,275 @@
+/* Dial-plan trace visualizer — clean step-list with connectors.
+ * Mobile-first; dark-theme tuned via Nautobot CSS custom properties
+ * with sensible light-theme fallbacks. No purple, no AI-cliché
+ * gradients — instead lean on the existing Bootstrap palette and
+ * a single subtle accent. */
+
+.dpt-root {
+  padding-block: 1.5rem;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+.dpt-header {
+  margin-bottom: 1.5rem;
+}
+
+.dpt-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dpt-title .mdi {
+  color: var(--bs-primary, #0d6efd);
+}
+
+.dpt-subtitle {
+  color: var(--bs-secondary-color, #6c757d);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* -- Form -- */
+
+.dpt-form {
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.dpt-form .form-label {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.dpt-form select,
+.dpt-form input[type="text"] {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.25rem;
+  background-color: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color, #212529);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.dpt-form .form-text {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color, #6c757d);
+  margin-top: 0.15rem;
+  min-height: 2.25rem;  /* keep columns aligned */
+}
+
+/* -- Result header -- */
+
+.dpt-result-title {
+  font-size: 1.15rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: var(--bs-body-color, #212529);
+}
+
+.dpt-result-title code {
+  color: var(--bs-primary, #0d6efd);
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+}
+
+/* -- Step list with connectors -- */
+
+.dpt-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+.dpt-step {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
+  position: relative;
+}
+
+/* Connector line between markers. Pseudo-element on each step
+ * draws a vertical line down to the next step's marker. */
+.dpt-step:not(:last-child) .dpt-step-marker::after {
+  content: "";
+  position: absolute;
+  top: 2.5rem;
+  left: 50%;
+  width: 2px;
+  height: calc(100% + 0.25rem);
+  background-color: var(--bs-border-color, #dee2e6);
+  transform: translateX(-50%);
+}
+
+.dpt-step-marker {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  border: 2px solid var(--bs-border-color, #dee2e6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 1.25rem;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dpt-step-body {
+  padding-top: 0.15rem;
+  min-width: 0;
+}
+
+.dpt-step-kind {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.dpt-step-summary {
+  color: var(--bs-body-color, #212529);
+  line-height: 1.4;
+}
+
+.dpt-step-summary code,
+.dpt-step-subject code {
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.2rem;
+  font-size: 0.92em;
+}
+
+.dpt-step-link {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.dpt-step-link a {
+  color: var(--bs-primary, #0d6efd);
+  text-decoration: none;
+}
+
+.dpt-step-link a:hover {
+  text-decoration: underline;
+}
+
+.dpt-step-subject {
+  margin-top: 0.2rem;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9rem;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+/* -- Per-kind marker accents. No purple, single subtle hue per kind. -- */
+
+.dpt-step-css .dpt-step-marker {
+  background-color: var(--bs-info-bg-subtle, #cff4fc);
+  border-color: var(--bs-info, #0dcaf0);
+  color: var(--bs-info, #0dcaf0);
+}
+
+.dpt-step-partition_check .dpt-step-marker {
+  /* subtle — partition checks are common, don't draw attention */
+  border-color: var(--bs-border-color, #dee2e6);
+}
+
+.dpt-step-dn_match .dpt-step-marker,
+.dpt-step-trunk_egress .dpt-step-marker,
+.dpt-step-route_list_egress .dpt-step-marker {
+  /* Terminal "good" outcomes — green */
+  background-color: var(--bs-success-bg-subtle, #d1e7dd);
+  border-color: var(--bs-success, #198754);
+  color: var(--bs-success, #198754);
+}
+
+.dpt-step-route_pattern_match .dpt-step-marker,
+.dpt-step-translation_match .dpt-step-marker {
+  /* In-progress decisions — amber */
+  background-color: var(--bs-warning-bg-subtle, #fff3cd);
+  border-color: var(--bs-warning, #ffc107);
+  color: #b07e00;
+}
+
+.dpt-step-hunt_pilot_match .dpt-step-marker,
+.dpt-step-hunt_subsystem .dpt-step-marker {
+  /* Hunt subsystem — same warm hue as route patterns but slightly darker */
+  background-color: var(--bs-warning-bg-subtle, #fff3cd);
+  border-color: #d49b00;
+  color: #946800;
+}
+
+.dpt-step-no_match .dpt-step-marker,
+.dpt-step-recursion_limit .dpt-step-marker {
+  /* Terminal "bad" outcomes — red */
+  background-color: var(--bs-danger-bg-subtle, #f8d7da);
+  border-color: var(--bs-danger, #dc3545);
+  color: var(--bs-danger, #dc3545);
+}
+
+/* -- Hunt subsystem DN list -- */
+
+.dpt-hunt-dns {
+  margin-top: 0.5rem;
+  padding-left: 0;
+  list-style: none;
+  border-left: 2px solid var(--bs-border-color, #dee2e6);
+  padding-left: 0.75rem;
+}
+
+.dpt-hunt-dns li {
+  font-size: 0.9rem;
+  padding: 0.15rem 0;
+}
+
+.dpt-hunt-dn-partition {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.85em;
+}
+
+.dpt-hunt-dn-order {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8em;
+  margin-left: 0.5rem;
+  font-style: italic;
+}
+
+/* -- Translation rewrite arrow -- */
+
+.dpt-rewrite {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--bs-secondary-color, #6c757d);
+  font-style: italic;
+}
+
+.dpt-rewrite-arrow {
+  color: var(--bs-warning, #ffc107);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+/* -- Mobile tweaks -- */
+
+@media (max-width: 575.98px) {
+  .dpt-root {
+    padding-inline: 0.75rem;
+  }
+  .dpt-form .row > [class^="col"] {
+    margin-bottom: 1rem;
+  }
+}

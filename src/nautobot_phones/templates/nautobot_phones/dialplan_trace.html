@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dial-plan trace · Nautobot{% endblock %}
+
+{% block extra_styles %}
+  <link rel="stylesheet" href="{% static 'nautobot_phones/css/dialplan_trace.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid dpt-root">
+
+  <div class="dpt-header">
+    <h1 class="dpt-title">
+      <span class="mdi mdi-routes" aria-hidden="true"></span>
+      Dial-plan trace
+    </h1>
+    <p class="dpt-subtitle">
+      Pick a Calling Search Space and dial some digits — see step-by-step
+      what would happen, sourced from your synced dial plan.
+    </p>
+  </div>
+
+  <form method="post" class="dpt-form" novalidate>
+    {% csrf_token %}
+    <div class="row">
+      <div class="col-md-4">
+        <label for="{{ form.phone_system.id_for_label }}" class="form-label">
+          Phone system
+        </label>
+        {{ form.phone_system }}
+        {% if form.phone_system.help_text %}
+          <div class="form-text">{{ form.phone_system.help_text }}</div>
+        {% endif %}
+      </div>
+      <div class="col-md-4">
+        <label for="{{ form.starting_css.id_for_label }}" class="form-label">
+          Starting CSS
+        </label>
+        {{ form.starting_css }}
+        {% if form.starting_css.help_text %}
+          <div class="form-text">{{ form.starting_css.help_text }}</div>
+        {% endif %}
+      </div>
+      <div class="col-md-3">
+        <label for="{{ form.dialed_digits.id_for_label }}" class="form-label">
+          Dialed digits
+        </label>
+        {{ form.dialed_digits }}
+        {% if form.dialed_digits.help_text %}
+          <div class="form-text">{{ form.dialed_digits.help_text }}</div>
+        {% endif %}
+      </div>
+      <div class="col-md-1 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">
+          <span class="mdi mdi-play" aria-hidden="true"></span>
+          Trace
+        </button>
+      </div>
+    </div>
+
+    {% for error in form.non_field_errors %}
+      <div class="alert alert-danger mt-12">{{ error }}</div>
+    {% endfor %}
+    {% for field in form %}
+      {% for error in field.errors %}
+        <div class="alert alert-danger mt-12">
+          <strong>{{ field.label }}:</strong> {{ error }}
+        </div>
+      {% endfor %}
+    {% endfor %}
+  </form>
+
+  {% if trace_steps %}
+    <div class="dpt-result">
+      <h2 class="dpt-result-title">
+        Trace result · dialed
+        <code class="dpt-dialed">{{ trace_input.dialed_digits }}</code>
+        from
+        <code class="dpt-css">{{ trace_input.starting_css.name }}</code>
+      </h2>
+
+      <ol class="dpt-steps">
+        {% for step in trace_steps %}
+          <li class="dpt-step dpt-step-{{ step.kind }}">
+            <div class="dpt-step-marker" aria-hidden="true">
+              {% if step.kind == 'css' %}
+                <span class="mdi mdi-shield-search"></span>
+              {% elif step.kind == 'partition_check' %}
+                <span class="mdi mdi-folder-search-outline"></span>
+              {% elif step.kind == 'dn_match' %}
+                <span class="mdi mdi-phone-ring"></span>
+              {% elif step.kind == 'route_pattern_match' %}
+                <span class="mdi mdi-routes"></span>
+              {% elif step.kind == 'translation_match' %}
+                <span class="mdi mdi-rotate-3d-variant"></span>
+              {% elif step.kind == 'hunt_pilot_match' %}
+                <span class="mdi mdi-bullseye-arrow"></span>
+              {% elif step.kind == 'hunt_subsystem' %}
+                <span class="mdi mdi-format-list-numbered"></span>
+              {% elif step.kind == 'trunk_egress' %}
+                <span class="mdi mdi-transit-connection-variant"></span>
+              {% elif step.kind == 'route_list_egress' %}
+                <span class="mdi mdi-source-branch"></span>
+              {% elif step.kind == 'no_match' %}
+                <span class="mdi mdi-phone-cancel"></span>
+              {% elif step.kind == 'recursion_limit' %}
+                <span class="mdi mdi-alert-octagram"></span>
+              {% else %}
+                <span class="mdi mdi-chevron-right"></span>
+              {% endif %}
+            </div>
+            <div class="dpt-step-body">
+              <div class="dpt-step-kind">{{ step.kind|cut:"_"|title }}</div>
+              <div class="dpt-step-summary">
+                {{ step.summary }}
+              </div>
+              {% if step.detail_url %}
+                <div class="dpt-step-link">
+                  <a href="{{ step.detail_url }}">
+                    {{ step.subject }}
+                    <span class="mdi mdi-open-in-new" aria-hidden="true"></span>
+                  </a>
+                </div>
+              {% elif step.subject %}
+                <div class="dpt-step-subject">{{ step.subject }}</div>
+              {% endif %}
+              {% if step.kind == 'hunt_subsystem' and step.extras.dns %}
+                <ul class="dpt-hunt-dns">
+                  {% for dn in step.extras.dns %}
+                    <li>
+                      <code>{{ dn.extension }}</code>
+                      <span class="dpt-hunt-dn-partition">
+                        in {{ dn.partition }}
+                      </span>
+                      <span class="dpt-hunt-dn-order">
+                        line order {{ dn.line_selection_order }}
+                      </span>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+              {% if step.kind == 'translation_match' and step.extras.new_digits %}
+                <div class="dpt-rewrite">
+                  <span class="dpt-rewrite-arrow">→</span>
+                  Re-enter trace with
+                  <code>{{ step.extras.new_digits }}</code>
+                </div>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

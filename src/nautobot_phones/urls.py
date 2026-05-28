@@ -6,6 +6,7 @@ NautobotUIViewSetRouter handles list/detail/create/edit/delete URL
 generation per registered viewset.
 """
 
+from django.urls import path
 from nautobot.apps.urls import NautobotUIViewSetRouter
 
 from nautobot_phones import views
@@ -35,4 +36,10 @@ router.register("device-profiles", views.DeviceProfileUIViewSet)
 router.register("voicemail-profiles", views.VoicemailProfileUIViewSet)
 router.register("call-pickup-groups", views.CallPickupGroupUIViewSet)
 
-urlpatterns = router.urls
+urlpatterns = [
+    # Dial-plan trace visualizer — standalone form, no model backing.
+    # GET supports query-string pre-fill (used by the phone-detail panel)
+    # and auto-runs the trace when ``dialed_digits`` is present.
+    path("dialplan-trace/", views.DialPlanTraceView.as_view(),
+         name="dialplan_trace"),
+] + router.urls

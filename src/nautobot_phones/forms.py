@@ -13,6 +13,35 @@ from django import forms
 from nautobot.apps.forms import NautobotFilterForm, NautobotModelForm
 
 from nautobot_phones import models
+
+
+class DialPlanTraceForm(forms.Form):
+    """Inputs for the dial-plan trace visualizer.
+
+    Standalone form (not a ModelForm — the trace doesn't write
+    anything). Operators pick a PhoneSystem + starting CSS + dial
+    digits; the view runs ``dialplan.trace()`` and renders the result.
+    """
+
+    phone_system = forms.ModelChoiceField(
+        queryset=models.PhoneSystem.objects.all().order_by("name"),
+        help_text="The phone system whose dial plan to trace through.",
+    )
+    starting_css = forms.ModelChoiceField(
+        queryset=models.CallingSearchSpace.objects.all().order_by(
+            "phone_system__name", "name",
+        ),
+        label="Starting CSS",
+        help_text="The Calling Search Space the trace begins from "
+                  "(typically the caller's CSS).",
+    )
+    dialed_digits = forms.CharField(
+        max_length=64,
+        help_text="The digits to dial. Supports literal digits, "
+                  "metachars are evaluated against patterns "
+                  "(e.g. '1001' matches a DN, '9.911' matches an emergency "
+                  "route pattern with PreDot).",
+    )
 from nautobot_phones.choices import (
     AnalogGatewayProtocolChoices,
     PhoneDeviceKindChoices,

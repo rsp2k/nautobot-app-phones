@@ -1,0 +1,56 @@
+{% load helpers %}
+{# Inline trace form on the Phone detail page. Submits to the
+   standalone dialplan_trace view via GET so the URL is shareable
+   ("here's the trace from Alice's phone dialing 911"). #}
+
+<div class="dpt-phone-panel">
+  {% if phone_css_options %}
+    <form method="get"
+          action="{% url 'plugins:nautobot_phones:dialplan_trace' %}"
+          class="dpt-phone-form">
+      <input type="hidden" name="phone_system" value="{{ phone.phone_system_id }}">
+
+      <div class="row align-items-end">
+        <div class="col-md-5">
+          <label class="form-label">Starting CSS</label>
+          <select name="starting_css" class="form-select form-select-sm">
+            {% for css in phone_css_options %}
+              <option value="{{ css.pk }}"
+                      {% if css.name == default_css_name %}selected{% endif %}>
+                {{ css.name }}
+                {% if css.name == default_css_name %}
+                  (from this phone's vendor_extras)
+                {% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Dial digits</label>
+          <input type="text" name="dialed_digits"
+                 class="form-control form-control-sm"
+                 placeholder="e.g. 1001 or 911"
+                 autocomplete="off">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <span class="mdi mdi-routes" aria-hidden="true"></span>
+            Trace
+          </button>
+        </div>
+      </div>
+      <p class="form-text mt-12">
+        Pre-fills the trace form with this phone's calling search space
+        (when one is present in <code>vendor_extras.callingSearchSpaceName</code>).
+        Submit opens the dial-plan trace in a fresh page.
+      </p>
+    </form>
+  {% else %}
+    <p class="text-secondary mb-0">
+      <span class="mdi mdi-information-outline"></span>
+      No Calling Search Spaces exist yet in this phone's phone system.
+      Once one is configured, this panel will let you trace dialed
+      digits from any of its CSSes.
+    </p>
+  {% endif %}
+</div>
