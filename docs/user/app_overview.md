@@ -117,5 +117,11 @@ run purely against the local data — no further calls to CCM/FreePBX:
   a phone dials a number, step by step. Lives under Apps → Phones →
   Dial-plan trace, and is embedded as a panel at the bottom of every
   Phone and Trunk detail page.
+- **[Dial-Plan Graph](dialplan_graph.md)** — interactive Cytoscape
+  topology of the dial plan. Forward (CSS → destinations) and
+  backward (Trunk → CSSes) directions. Type dial digits into the
+  graph view and the trace path lights up against the topology, with
+  non-traversed branches dimmed — pairs the trace's step-by-step
+  reasoning with the graph's at-a-glance shape.
 - **[DID Heatmap](did_heatmap.md)** — visualize block utilization
   across carriers and locations.

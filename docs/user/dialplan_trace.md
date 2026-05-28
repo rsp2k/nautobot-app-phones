@@ -12,6 +12,12 @@ egress devices CCM (or FreePBX) would visit.
 Pure-read tool — no writes, no side effects, no calls to the CCM. The
 trace operates entirely on the data already synced into Nautobot.
 
+!!! tip "Looking for the visual version?"
+    The [dial-plan graph](dialplan_graph.md) renders the same trace as
+    an overlay on the topology — the call path lights up against the
+    full dial-plan structure, with non-traversed branches dimmed.
+    Best for "show me where the call dies in context."
+
 ## Reaching the trace
 
 Three entry points, all submit to the same standalone view:

@@ -124,6 +124,7 @@ nav:
     - "SIP Cut Sheet Ingest": "user/cut_sheet_ingest.md"
     - "DID Heatmap": "user/did_heatmap.md"
     - "Dial-Plan Trace": "user/dialplan_trace.md"
+    - "Dial-Plan Graph": "user/dialplan_graph.md"
     - "Models": "user/models.md"
     - "External Interactions": "user/external_interactions.md"
     - "FAQ": "user/faq.md"
