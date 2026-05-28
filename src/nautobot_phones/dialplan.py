@@ -105,13 +105,25 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
     * ``X`` → any single digit (``[0-9]``)
     * ``[abc]`` → character class (passed through)
     * ``[2-9]`` → range in a character class (passed through)
-    * ``.`` → wildcard (any single char) — CCM uses this for "any
-      remaining digits"; we approximate with ``.*`` since this trace
-      doesn't need to be a per-digit accurate regex (we're matching
-      whole strings, not progressive digit collection)
+    * ``.`` → position marker (NOT a wildcard). CCM uses this as a
+      separator for PreDot/PostDot digit-discard; it does not consume
+      any input character itself. Output as empty string in the regex
+      so adjacent constructs match correctly (``9.@`` → ``9`` then
+      ``@``-wildcard).
+    * ``@`` → "remaining digits per E.164 / NANP numbering plan" —
+      CCM uses this in patterns like ``9.@`` (NANP outbound) and
+      ``\\+.@`` (E.164 catcher). Approximated as ``\\d*``.
     * ``!`` → one or more digits — Python regex ``\\d+``
-    * ``+`` → escape literal ``+`` (e.g. E.164)
-    * ``*`` → escape literal ``*`` (e.g. feature codes ``*72``)
+    * ``\\<char>`` → literal next char regardless of metachar status.
+      CCM uses this to escape ``+`` in E.164-catcher patterns —
+      ``\\+.@`` means "literal ``+`` then any digits". Without this
+      handling, the ``+`` would still get re-escaped after the
+      backslash itself was escaped, producing a regex that requires
+      a literal backslash in the input.
+    * ``+`` → literal ``+`` (e.g. unescaped E.164 prefix; CCM
+      operators usually write this as ``\\+`` but accept the bare
+      form too)
+    * ``*`` → literal ``*`` (e.g. feature codes ``*72``)
     * ``#`` → literal ``#``
     * Digits 0-9 → themselves
 
@@ -121,6 +133,13 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
     i = 0
     while i < len(pattern):
         ch = pattern[i]
+        if ch == "\\" and i + 1 < len(pattern):
+            # ``\<char>`` escape — treat the next char as a literal,
+            # regardless of whether it would otherwise be a metachar.
+            # Most common in CCM: ``\+`` for the E.164 leading plus.
+            out.append(re.escape(pattern[i + 1]))
+            i += 2
+            continue
         if ch == "X":
             out.append("[0-9]")
         elif ch == "[":
@@ -134,7 +153,14 @@ def _pattern_to_regex(pattern: str) -> re.Pattern:
             i = end + 1
             continue
         elif ch == ".":
-            out.append(".*")
+            # Position marker (NOT a wildcard). Doesn't consume input.
+            pass
+        elif ch == "@":
+            # CCM's "remaining digits per E.164 / NANP plan" wildcard.
+            # For trace purposes we treat it like ``.`` — match any
+            # remaining digits — since we're checking whole strings,
+            # not progressive collection.
+            out.append(r"\d*")
         elif ch == "!":
             out.append(r"\d+")
         elif ch == "+":

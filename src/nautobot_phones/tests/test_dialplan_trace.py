@@ -54,10 +54,50 @@ class TestPatternToRegex(TestCase):
         self.assertFalse(r.match("1085551234"))  # leading 1 not in [2-9]
 
     def test_plus_escaped_as_literal(self) -> None:
-        """E.164 patterns start with literal + — escape it in the regex."""
-        r = _pattern_to_regex("+1.")
+        """Bare ``+`` in a pattern → literal + in the regex. Operators
+        usually write ``\\+`` (see test_backslash_escape_for_e164_pattern)
+        but the bare form is accepted too."""
+        # Pair with ``@`` to consume the rest of the digits — the
+        # whole-string match requires every char accounted for.
+        r = _pattern_to_regex("+1@")
         self.assertTrue(r.match("+15551234567"))
         self.assertFalse(r.match("15551234567"))  # missing +
+
+    def test_backslash_escape_for_e164_pattern(self) -> None:
+        """CCM operators write the E.164 catcher as ``\\+.@`` (escaped
+        plus). Bug from a live LAB-CCM trace: this pattern existed in
+        National-PT but failed to match ``+12085551234`` because the
+        backslash was being treated as a literal char to escape, so the
+        output regex demanded ``\\`` in the input.
+
+        ``\\<char>`` should mean "literal char regardless of metachar
+        status", matching CCM's own pattern evaluator."""
+        r = _pattern_to_regex(r"\+.@")
+        self.assertTrue(r.match("+12085551234"))
+        self.assertTrue(r.match("+447946000000"))  # UK number
+        # The backslash itself must NOT be required in the input.
+        self.assertFalse(r.match(r"\+12085551234"))
+
+    def test_backslash_escapes_other_metachars(self) -> None:
+        """The escape is general — ``\\X`` means literal X, not a digit
+        wildcard. Less common in real CCM patterns but the escape
+        machinery should be uniform."""
+        r = _pattern_to_regex(r"\X1")
+        self.assertTrue(r.match("X1"))
+        self.assertFalse(r.match("01"))  # X-as-metachar would match this
+
+    def test_at_sign_matches_remaining_digits(self) -> None:
+        """``@`` in CCM means 'remaining digits per E.164/NANP plan' —
+        operator workhorse for catch-all dial patterns like ``9.@``
+        (NANP) and ``\\+.@`` (E.164). Approximated as ``\\d*``."""
+        r_nanp = _pattern_to_regex("9.@")
+        self.assertTrue(r_nanp.match("92085551234"))
+        self.assertTrue(r_nanp.match("911"))  # short codes too
+        # The pattern should NOT match non-digit garbage after the 9.
+        self.assertFalse(r_nanp.match("9abc"))
+
+        r_e164 = _pattern_to_regex(r"\+.@")
+        self.assertTrue(r_e164.match("+12085551234"))
 
     def test_star_and_hash_literal(self) -> None:
         """Feature codes use literal * and #."""
