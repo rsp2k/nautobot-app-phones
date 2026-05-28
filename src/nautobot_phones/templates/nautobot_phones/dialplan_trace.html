@@ -42,7 +42,18 @@
           <div class="form-text">{{ form.starting_css.help_text }}</div>
         {% endif %}
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
+        <label for="{{ form.calling_from.id_for_label }}" class="form-label">
+          {{ form.calling_from.label }}
+        </label>
+        {{ form.calling_from }}
+        {% if form.calling_from.help_text %}
+          <div class="form-text">{{ form.calling_from.help_text }}</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="row mt-12">
+      <div class="col-md-10">
         <label for="{{ form.dialed_digits.id_for_label }}" class="form-label">
           Dialed digits
         </label>
@@ -51,7 +62,7 @@
           <div class="form-text">{{ form.dialed_digits.help_text }}</div>
         {% endif %}
       </div>
-      <div class="col-md-1 d-flex align-items-end">
+      <div class="col-md-2 d-flex align-items-end">
         <button type="submit" class="btn btn-primary w-100">
           <span class="mdi mdi-play" aria-hidden="true"></span>
           Trace
@@ -78,6 +89,10 @@
         <code class="dpt-dialed">{{ trace_input.dialed_digits }}</code>
         from
         <code class="dpt-css">{{ trace_input.starting_css.name }}</code>
+        {% if trace_input.calling_from %}
+          · calling from
+          <code class="dpt-calling-from">{{ trace_input.calling_from }}</code>
+        {% endif %}
       </h2>
 
       <ol class="dpt-steps">

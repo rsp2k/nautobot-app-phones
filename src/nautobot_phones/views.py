@@ -60,6 +60,38 @@ class DIDHeatmapPanel(Panel):
         return super().render_body_content(context)
 
 
+class TrunkTracePanel(Panel):
+    """Inline 'Trace inbound from this trunk' panel on Trunk detail.
+
+    Mirror of PhoneTracePanel for the inbound-call direction. Trunks
+    have an explicit ``inbound_css`` FK — the trace pre-fills that as
+    the starting CSS. Operators ask "what happens when a call arrives
+    on this trunk dialing X?" — useful for verifying DID routing,
+    inbound DNIS translations, and policy CSS sanity-checks.
+    """
+
+    label = "Trace inbound from this trunk"
+    body_content_template_path = "nautobot_phones/inc/trunk_trace_panel.html"
+
+    def get_extra_context(self, context):
+        from nautobot_phones import models as ph_models  # local — avoid circular
+        ctx = super().get_extra_context(context) if hasattr(super(), "get_extra_context") else {}
+        trunk = context.get("object")
+        if trunk is None:
+            ctx["trunk_css_options"] = []
+            return ctx
+        ctx["trunk"] = trunk
+        ctx["trunk_css_options"] = ph_models.CallingSearchSpace.objects.filter(
+            phone_system=trunk.phone_system,
+        ).order_by("name")
+        ctx["inbound_css_pk"] = trunk.inbound_css_id
+        return ctx
+
+    def render_body_content(self, context):
+        context.update(self.get_extra_context(context))
+        return super().render_body_content(context)
+
+
 class PhoneTracePanel(Panel):
     """Inline 'Trace from this phone' panel on the Phone detail page.
 
@@ -577,6 +609,13 @@ class TrunkUIViewSet(NautobotUIViewSet):
                 table_class=tables.RoutePatternTable, table_filter="target_trunk",
                 table_title="Route Patterns Targeting This Trunk", exclude_columns=["target_trunk"],
             ),
+            # "Trace inbound from this trunk" — full-width panel below.
+            # Operators ask "what happens when a call arrives on this
+            # trunk dialing X?" — verifies DID routing + inbound DNIS
+            # translations + policy-CSS sanity checks.
+            TrunkTracePanel(
+                section=SectionChoices.FULL_WIDTH, weight=400,
+            ),
         ),
     )
 
@@ -987,12 +1026,10 @@ class DialPlanTraceView(LoginRequiredMixin, View):
 
     def get(self, request):
         initial = {}
-        if request.GET.get("phone_system"):
-            initial["phone_system"] = request.GET["phone_system"]
-        if request.GET.get("starting_css"):
-            initial["starting_css"] = request.GET["starting_css"]
-        if request.GET.get("dialed_digits"):
-            initial["dialed_digits"] = request.GET["dialed_digits"]
+        for key in ("phone_system", "starting_css", "dialed_digits",
+                    "calling_from"):
+            if request.GET.get(key):
+                initial[key] = request.GET[key]
         # If the user landed here with pre-filled GET params and digits,
         # auto-run the trace (used by the phone-detail panel).
         if initial.get("dialed_digits"):
@@ -1026,5 +1063,6 @@ class DialPlanTraceView(LoginRequiredMixin, View):
                 "phone_system": form.cleaned_data["phone_system"],
                 "starting_css": form.cleaned_data["starting_css"],
                 "dialed_digits": form.cleaned_data["dialed_digits"],
+                "calling_from": form.cleaned_data.get("calling_from") or "",
             },
         })

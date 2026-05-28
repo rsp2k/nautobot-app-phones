@@ -10,7 +10,11 @@ generated text input is used.
 """
 
 from django import forms
-from nautobot.apps.forms import NautobotFilterForm, NautobotModelForm
+from nautobot.apps.forms import (
+    DynamicModelChoiceField,
+    NautobotFilterForm,
+    NautobotModelForm,
+)
 
 from nautobot_phones import models
 
@@ -21,16 +25,22 @@ class DialPlanTraceForm(forms.Form):
     Standalone form (not a ModelForm — the trace doesn't write
     anything). Operators pick a PhoneSystem + starting CSS + dial
     digits; the view runs ``dialplan.trace()`` and renders the result.
+
+    Uses ``DynamicModelChoiceField`` for ``phone_system`` and
+    ``starting_css`` — Nautobot's Select2-backed widget that filters
+    via the REST API. Real customer clusters can have hundreds of
+    CSSes; the plain ``<select>`` becomes unusable at that scale.
     """
 
-    phone_system = forms.ModelChoiceField(
-        queryset=models.PhoneSystem.objects.all().order_by("name"),
+    phone_system = DynamicModelChoiceField(
+        queryset=models.PhoneSystem.objects.all(),
         help_text="The phone system whose dial plan to trace through.",
     )
-    starting_css = forms.ModelChoiceField(
-        queryset=models.CallingSearchSpace.objects.all().order_by(
-            "phone_system__name", "name",
-        ),
+    starting_css = DynamicModelChoiceField(
+        queryset=models.CallingSearchSpace.objects.all(),
+        # Filter the CSS dropdown by the picked phone_system. The
+        # widget refreshes its results when phone_system changes.
+        query_params={"phone_system": "$phone_system"},
         label="Starting CSS",
         help_text="The Calling Search Space the trace begins from "
                   "(typically the caller's CSS).",
@@ -41,6 +51,14 @@ class DialPlanTraceForm(forms.Form):
                   "metachars are evaluated against patterns "
                   "(e.g. '1001' matches a DN, '9.911' matches an emergency "
                   "route pattern with PreDot).",
+    )
+    calling_from = forms.CharField(
+        max_length=64,
+        required=False,
+        label="Calling from (optional)",
+        help_text="Originating number or phone identifier for context. "
+                  "Doesn't change pattern matching in v1 — surfaces in the "
+                  "result header so the trace is self-documenting.",
     )
 from nautobot_phones.choices import (
     AnalogGatewayProtocolChoices,
