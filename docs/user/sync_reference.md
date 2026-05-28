@@ -123,6 +123,35 @@ them without schema migrations.
 nullable FKs — they resolve to None if the source CCM record has no
 profile assigned.
 
+## Delete policy
+
+When a sync runs and a previously-mirrored record is **no longer
+present** in the source CCM/FreePBX, what should happen? Three
+operator-selectable strategies, set per-model on `PhoneSystem.delete_policy`:
+
+| Policy | Behavior | When to use |
+|--------|----------|-------------|
+| `delete` (default) | ORM-delete the orphaned record | Vendor system is authoritative; mirror should match exactly |
+| `flag` | Keep the record, attach the `phones-orphaned` Tag, and write `_orphaned_at` timestamp into `vendor_extras` | You want a paper trail before reaping — useful while migrating between CCM clusters, decommissioning carriers, or auditing churn |
+| `ignore` | Log and skip — the orphaned record stays unchanged | Vendor system is a partial source (e.g. a secondary CCM that doesn't see all phones); manual cleanup later |
+
+Stored as a JSONField, keyed by model name:
+
+```python
+phone_system.delete_policy = {
+    "phone": "flag",          # never reap phones automatically
+    "did": "delete",          # DIDs are carrier-authoritative
+    "trunk": "ignore",        # operator-managed; sync shouldn't touch
+    # ... defaults to "delete" for any model not listed
+}
+```
+
+The flagged-but-not-deleted records show up in the Phones list under
+the `phones-orphaned` tag — operators can review and reap (or fix the
+sync) on their own schedule. The `_orphaned_at` timestamp lets you
+filter "everything orphaned in the last 7 days" to triage recent churn
+separately from ancient orphans.
+
 ## FreePBX 17 adapter
 
 The FreePBX adapter (`FreePBXDataSource`) uses three data sources
