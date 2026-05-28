@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dial-plan graph · Nautobot{% endblock %}
+
+{% block extra_styles %}
+  <link rel="stylesheet" href="{% static 'nautobot_phones/css/dialplan_graph.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid dpg-root">
+
+  <div class="dpg-header">
+    <h1 class="dpg-title">
+      <span class="mdi mdi-graph-outline" aria-hidden="true"></span>
+      Dial-plan graph
+    </h1>
+    <p class="dpg-subtitle">
+      Visualize how a Calling Search Space reaches its destinations, or
+      walk back from a Trunk to every CSS that can use it.
+    </p>
+  </div>
+
+  {% comment %}
+  Controls row: anchor picker + direction toggle + relayout button.
+  Same autocomplete API as the trace form's endpoint tab, filtered to
+  CSS + Trunk only.
+  {% endcomment %}
+  <form class="dpg-controls" id="dpg-controls">
+    <div class="row align-items-end">
+      <div class="col-md-6">
+        <label class="form-label" for="dpg-anchor">Anchor</label>
+        <select id="dpg-anchor"
+                class="form-select dpg-anchor-select"
+                data-search-url="{% url 'plugins:nautobot_phones:dialplan_endpoint_search' %}">
+          {% if initial_anchor %}
+            <option value="{{ initial_anchor }}" selected>{{ initial_anchor }}</option>
+          {% endif %}
+        </select>
+        <div class="form-text">
+          Pick a Calling Search Space (forward) or a Trunk (backward).
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Direction</label>
+        <div class="btn-group dpg-direction" role="group" aria-label="Graph direction">
+          <button type="button" class="btn btn-outline-primary dpg-dir-btn"
+                  data-dpg-dir="forward"
+                  {% if initial_direction == 'forward' %}aria-pressed="true"{% endif %}>
+            <span class="mdi mdi-arrow-right" aria-hidden="true"></span>
+            Forward
+          </button>
+          <button type="button" class="btn btn-outline-primary dpg-dir-btn"
+                  data-dpg-dir="backward"
+                  {% if initial_direction == 'backward' %}aria-pressed="true"{% endif %}>
+            <span class="mdi mdi-arrow-left" aria-hidden="true"></span>
+            Backward
+          </button>
+        </div>
+      </div>
+      <div class="col-md-3 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-secondary" id="dpg-fit">
+          <span class="mdi mdi-fit-to-page" aria-hidden="true"></span>
+          Fit
+        </button>
+        <button type="button" class="btn btn-secondary" id="dpg-relayout">
+          <span class="mdi mdi-shuffle-variant" aria-hidden="true"></span>
+          Re-layout
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {# Legend strip — explains node colors at a glance #}
+  <div class="dpg-legend" aria-label="Node color legend">
+    {% for k, label in legend.items %}
+      <span class="dpg-legend-chip dpg-kind-{{ k }}">{{ label }}</span>
+    {% endfor %}
+    <span class="dpg-legend-chip dpg-kind-css">CSS</span>
+    <span class="dpg-legend-chip dpg-kind-partition">Partition</span>
+    <span class="dpg-legend-chip dpg-kind-pattern">Pattern</span>
+    <span class="dpg-legend-chip dpg-kind-translation">Translation</span>
+    <span class="dpg-legend-chip dpg-kind-hunt_pilot">Hunt pilot</span>
+    <span class="dpg-legend-chip dpg-kind-hunt_list">Hunt list</span>
+    <span class="dpg-legend-chip dpg-kind-dn">DN</span>
+    <span class="dpg-legend-chip dpg-kind-route_list">Route list</span>
+    <span class="dpg-legend-chip dpg-kind-route_group">Route group</span>
+    <span class="dpg-legend-chip dpg-kind-trunk">Trunk</span>
+    <span class="dpg-legend-chip dpg-kind-analog_gateway">Analog gateway</span>
+  </div>
+
+  {% comment %}
+  Graph host — the canvas. Empty initially; JS fills it after the
+  anchor is set.
+  {% endcomment %}
+  <div id="dpg-canvas" class="dpg-canvas"
+       data-data-url="{% url 'plugins:nautobot_phones:dialplan_graph_data' %}"
+       data-initial-anchor="{{ initial_anchor }}"
+       data-initial-direction="{{ initial_direction }}">
+    <div class="dpg-empty-state">
+      Pick an anchor above to render the graph.
+    </div>
+  </div>
+
+  {# Floating info pane — fills with clicked-node details #}
+  <div id="dpg-info" class="dpg-info" hidden>
+    <div class="dpg-info-header">
+      <strong class="dpg-info-label">—</strong>
+      <span class="dpg-info-kind"></span>
+    </div>
+    <div class="dpg-info-extras"></div>
+    <a class="btn btn-sm btn-primary" id="dpg-info-link" target="_blank" rel="noopener" hidden>
+      Open detail page
+      <span class="mdi mdi-open-in-new" aria-hidden="true"></span>
+    </a>
+  </div>
+</div>
+
+<script src="{% static 'nautobot_phones/js/dagre.min.js' %}"></script>
+<script src="{% static 'nautobot_phones/js/cytoscape.min.js' %}"></script>
+<script src="{% static 'nautobot_phones/js/cytoscape-dagre.js' %}"></script>
+<script src="{% static 'nautobot_phones/js/dialplan_graph.js' %}" defer></script>
+{% endblock %}

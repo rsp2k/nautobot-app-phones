@@ -1,0 +1,189 @@
+/* Dial-plan graph — page layout + node-color legend.
+ * The graph canvas itself is Cytoscape-styled (see dialplan_graph.js
+ * style array); these styles wrap the page surface around it. */
+
+.dpg-root {
+  padding-block: 1.5rem;
+  max-width: 1400px;
+  margin-inline: auto;
+}
+
+.dpg-header {
+  margin-bottom: 1rem;
+}
+
+.dpg-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dpg-title .mdi {
+  color: var(--bs-primary, #0d6efd);
+}
+
+.dpg-subtitle {
+  color: var(--bs-secondary-color, #6c757d);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.dpg-controls {
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.dpg-direction .dpg-dir-btn[aria-pressed="true"],
+.dpg-direction .dpg-dir-btn.active {
+  background-color: var(--bs-primary, #0d6efd);
+  color: var(--bs-white, #fff);
+}
+
+/* Legend strip — small color chips along the top of the canvas so
+ * operators can decode node colors at a glance. */
+.dpg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.dpg-legend-chip {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  color: #fff;
+  border: 1px solid transparent;
+  font-weight: 500;
+  text-shadow: 0 0 2px rgba(0,0,0,0.4);
+}
+
+.dpg-legend-chip.dpg-kind-css { background-color: #0d6efd; }
+.dpg-legend-chip.dpg-kind-partition { background-color: #6c757d; }
+.dpg-legend-chip.dpg-kind-pattern { background-color: #ffc107; color: #000; text-shadow: none; }
+.dpg-legend-chip.dpg-kind-translation { background-color: #fd7e14; }
+.dpg-legend-chip.dpg-kind-dn { background-color: #198754; }
+.dpg-legend-chip.dpg-kind-trunk { background-color: #dc3545; }
+.dpg-legend-chip.dpg-kind-route_list { background-color: #0dcaf0; color: #000; text-shadow: none; }
+.dpg-legend-chip.dpg-kind-route_group { background-color: #20c997; }
+.dpg-legend-chip.dpg-kind-hunt_pilot { background-color: #d49b00; }
+.dpg-legend-chip.dpg-kind-hunt_list { background-color: #946800; }
+.dpg-legend-chip.dpg-kind-analog_gateway { background-color: #e83e8c; }
+
+/* The graph canvas — large fixed-height surface, Cytoscape renders
+ * into it. Border + background match the rest of the form panels. */
+.dpg-canvas {
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  height: 70vh;
+  min-height: 500px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dpg-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--bs-secondary-color, #6c757d);
+  font-style: italic;
+  font-size: 1.05rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+/* Floating info pane that appears when a node is clicked. */
+.dpg-info {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 22rem;
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+.dpg-info[hidden] { display: none; }
+
+.dpg-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+
+.dpg-info-label {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 1rem;
+}
+
+.dpg-info-kind {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.dpg-info-extras {
+  font-size: 0.85rem;
+  color: var(--bs-body-color, #212529);
+  margin-bottom: 0.75rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.dpg-info-extras > div {
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  word-break: break-word;
+}
+
+.dpg-info-extras > div:last-child {
+  border-bottom: none;
+}
+
+/* Select2 styling — same scoped dark-theme override we used on the
+ * trace form's endpoint picker. Keyed off the .dpg-anchor-select
+ * class so it doesn't leak into other Select2s on the page. */
+.dpg-anchor-select + .select2-container {
+  width: 100% !important;
+}
+
+.dpg-anchor-select + .select2-container .select2-selection {
+  height: 38px;
+  min-height: 38px;
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #ced4da);
+  border-radius: var(--bs-border-radius, 0.375rem);
+  color: var(--bs-body-color, #212529);
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+}
+
+.dpg-anchor-select + .select2-container .select2-selection__rendered {
+  color: var(--bs-body-color, #212529) !important;
+  line-height: 1.5;
+  padding: 0;
+}
+
+.dpg-anchor-select + .select2-container .select2-selection__placeholder {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+@media (max-width: 767.98px) {
+  .dpg-canvas { height: 55vh; }
+  .dpg-info { width: calc(100% - 2rem); right: 1rem; left: 1rem; }
+}

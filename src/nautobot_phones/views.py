@@ -1281,3 +1281,56 @@ class DialPlanPhoneLinesView(LoginRequiredMixin, View):
                 "label": line.label or "",
             })
         return JsonResponse({"lines": out})
+
+
+class DialPlanGraphView(LoginRequiredMixin, View):
+    """Render the standalone interactive dial-plan graph page.
+
+    Operators land here from Apps → Phones → Dial-plan graph, or from
+    the "Open in graph view" links on the CSS and Trunk detail-page
+    panels. Query string carries the anchor (``?anchor=css:<uuid>`` or
+    ``?anchor=trunk:<uuid>``) and ``?direction=`` (forward/backward).
+
+    The page itself just renders a host div + filter controls; the
+    graph data is fetched lazily by the JS via ``DialPlanGraphDataView``
+    so the initial page load is cheap even when the graph is large.
+    """
+
+    template_name = "nautobot_phones/dialplan_graph.html"
+
+    def get(self, request):
+        anchor = (request.GET.get("anchor") or "").strip()
+        direction = (request.GET.get("direction") or "forward").strip()
+        if direction not in ("forward", "backward"):
+            direction = "forward"
+        return render(request, self.template_name, {
+            "initial_anchor": anchor,
+            "initial_direction": direction,
+        })
+
+
+class DialPlanGraphDataView(LoginRequiredMixin, View):
+    """JSON endpoint returning Cytoscape data for a given anchor.
+
+    Queries: ``?anchor=<kind>:<uuid>&direction=<forward|backward>``.
+    Bad/missing anchor produces an empty graph payload (with
+    ``meta.empty=True``) rather than a 4xx — keeps the JS happy
+    path simple.
+    """
+
+    def get(self, request):
+        from nautobot_phones.dialplan_graph import build_graph
+        anchor = (request.GET.get("anchor") or "").strip()
+        direction = (request.GET.get("direction") or "forward").strip()
+        if direction not in ("forward", "backward"):
+            direction = "forward"
+        if ":" not in anchor:
+            return JsonResponse({"nodes": [], "edges": [],
+                                 "meta": {"empty": True, "direction": direction}})
+        kind, _, pk = anchor.partition(":")
+        try:
+            data = build_graph(kind, pk, direction)
+        except (ValueError, ValidationError):
+            data = {"nodes": [], "edges": [],
+                    "meta": {"empty": True, "direction": direction}}
+        return JsonResponse(data)

@@ -52,4 +52,9 @@ urlpatterns = [
     path("dialplan-trace/phone-lines/",
          views.DialPlanPhoneLinesView.as_view(),
          name="dialplan_phone_lines"),
+    # Interactive dial-plan graph (Cytoscape) — page + JSON data feed.
+    path("dialplan-graph/", views.DialPlanGraphView.as_view(),
+         name="dialplan_graph"),
+    path("dialplan-graph/data/", views.DialPlanGraphDataView.as_view(),
+         name="dialplan_graph_data"),
 ] + router.urls

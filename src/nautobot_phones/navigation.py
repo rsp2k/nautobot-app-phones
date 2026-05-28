@@ -172,6 +172,17 @@ menu_items = (
                             "nautobot_phones.view_callingsearchspace",
                         ],
                     ),
+                    # Dial-plan graph — interactive Cytoscape view of
+                    # the dial plan topology. Same permission set as
+                    # the trace: read-only over the same data.
+                    NavMenuItem(
+                        link="plugins:nautobot_phones:dialplan_graph",
+                        name="Dial-plan Graph",
+                        permissions=[
+                            "nautobot_phones.view_partition",
+                            "nautobot_phones.view_callingsearchspace",
+                        ],
+                    ),
                 ),
             ),
         ),
