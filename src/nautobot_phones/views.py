@@ -12,6 +12,7 @@ detail view via ObjectsTablePanel.
 """
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils.html import format_html
@@ -1228,3 +1229,55 @@ class DialPlanEndpointSearchView(LoginRequiredMixin, View):
         if css is None:
             return "", css_name  # Surface the name so operator sees the mismatch.
         return str(css.pk), css.name
+
+
+class DialPlanPhoneLinesView(LoginRequiredMixin, View):
+    """JSON view returning the DNs a phone has lines on.
+
+    Backs the trace form's "Calling from" dropdown when the operator
+    has picked a phone endpoint — they pick which of *that phone's*
+    lines is doing the dialing (matters for shared-line / multi-DN
+    phones where the choice changes ANI presentation).
+
+    Response shape::
+
+        {"lines": [
+            {"button_index": 1, "extension": "1001",
+             "partition": "Internal-PT", "label": "Alice"},
+            ...
+        ]}
+
+    Returns ``{"lines": []}`` if the phone has no lines, doesn't exist,
+    or the caller passed no ``phone=`` param. The form silently falls
+    back to a free-text input in any of those cases.
+    """
+
+    def get(self, request):
+        phone_id = (request.GET.get("phone") or "").strip()
+        if not phone_id:
+            return JsonResponse({"lines": []})
+        try:
+            phone = models.Phone.objects.get(pk=phone_id)
+        except (models.Phone.DoesNotExist, ValueError, ValidationError):
+            return JsonResponse({"lines": []})
+        lines = (
+            phone.lines
+            .select_related("directory_number__partition")
+            .order_by("button_index")
+        )
+        out = []
+        seen = set()
+        for line in lines:
+            dn = line.directory_number
+            # Dedupe — a phone holding the same DN on two buttons (rare
+            # shared-line config) should appear once.
+            if dn.pk in seen:
+                continue
+            seen.add(dn.pk)
+            out.append({
+                "button_index": line.button_index,
+                "extension": dn.extension,
+                "partition": dn.partition.name,
+                "label": line.label or "",
+            })
+        return JsonResponse({"lines": out})

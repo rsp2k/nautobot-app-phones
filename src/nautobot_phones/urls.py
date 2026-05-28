@@ -47,4 +47,9 @@ urlpatterns = [
     path("dialplan-trace/endpoint-search/",
          views.DialPlanEndpointSearchView.as_view(),
          name="dialplan_endpoint_search"),
+    # JSON: the DNs a phone has lines on. Populates the calling_from
+    # dropdown when a phone endpoint is selected.
+    path("dialplan-trace/phone-lines/",
+         views.DialPlanPhoneLinesView.as_view(),
+         name="dialplan_phone_lines"),
 ] + router.urls

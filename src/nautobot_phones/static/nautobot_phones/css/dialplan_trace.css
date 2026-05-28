@@ -322,9 +322,106 @@
   margin-right: 0.4rem;
 }
 
-/* Select2 sizing tweak for the endpoint picker — make it match
-   Nautobot's other form fields rather than Select2's default. */
+/* Select2 styling for the endpoint picker.
+   Select2's default theme assumes a light-background page; Nautobot
+   ships dark by default so we have to re-derive every surface color
+   from Bootstrap CSS vars. Targeting the next-sibling Select2 wrapper
+   keeps the override scoped — won't bleed into other Select2 widgets. */
+.dpt-endpoint-select + .select2-container {
+  width: 100% !important;   /* Select2 inlines style="width:0" sometimes */
+}
+
 .dpt-endpoint-select + .select2-container .select2-selection {
+  height: 38px;
   min-height: 38px;
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #ced4da);
+  border-radius: var(--bs-border-radius, 0.375rem);
+  color: var(--bs-body-color, #212529);
+  display: flex;
+  align-items: center;
+  /* Left padding makes room for the inline search-icon affordance below. */
+  padding: 0 0.75rem 0 2.25rem;
+  position: relative;
+}
+
+/* Magnifier icon inside the Endpoint selection box — visual affordance so
+   users recognize this as a search field, not a regular dropdown. Uses
+   the Material Design Iconic font that Nautobot ships globally; the
+   codepoint U+F0349 is mdi-magnify (lowercase Greek letter q + lens). */
+.dpt-endpoint-select + .select2-container .select2-selection::before {
+  content: "\F0349";
+  font-family: "Material Design Icons";
+  font-size: 1.1rem;
+  color: var(--bs-secondary-color, #6c757d);
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.dpt-endpoint-select + .select2-container .select2-selection__rendered {
+  color: var(--bs-body-color, #212529) !important;
+  line-height: 1.5;
+  padding: 0;
+}
+
+.dpt-endpoint-select + .select2-container .select2-selection__placeholder {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.dpt-endpoint-select + .select2-container .select2-selection__arrow {
+  height: 36px;
+  right: 0.4rem;
+}
+
+.dpt-endpoint-select + .select2-container .select2-selection__arrow b {
+  border-color: var(--bs-body-color, #6c757d) transparent transparent transparent;
+}
+
+.dpt-endpoint-select + .select2-container .select2-selection__clear {
+  color: var(--bs-secondary-color, #6c757d);
+  margin-right: 0.4rem;
+}
+
+/* Focus state — match Bootstrap form-control focus ring. */
+.dpt-endpoint-select + .select2-container--open .select2-selection,
+.dpt-endpoint-select + .select2-container--focus .select2-selection {
+  border-color: var(--bs-primary, #86b7fe);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  outline: none;
+}
+
+/* The dropdown is rendered into <body> by default — these rules
+   apply globally, but scoped via [class*="dialplan_trace"] would
+   miss other tabs since the dropdown body-mounts. Safe to leave
+   global; styling is theme-neutral. */
+.select2-dropdown {
+  background-color: var(--bs-body-bg, #fff);
   border-color: var(--bs-border-color, #ced4da);
+  color: var(--bs-body-color, #212529);
+}
+
+.select2-dropdown .select2-search__field {
+  background-color: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #ced4da);
+  color: var(--bs-body-color, #212529);
+  border-radius: var(--bs-border-radius, 0.25rem);
+  padding: 0.3rem 0.5rem;
+}
+
+.select2-dropdown .select2-results__option {
+  color: var(--bs-body-color, #212529);
+  padding: 0.4rem 0.75rem;
+}
+
+.select2-dropdown .select2-results__option--highlighted {
+  background-color: var(--bs-primary, #0d6efd);
+  color: var(--bs-white, #fff);
+}
+
+.select2-dropdown .select2-results__option[aria-disabled="true"] {
+  color: var(--bs-secondary-color, #6c757d);
+  font-style: italic;
 }

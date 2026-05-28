@@ -90,12 +90,26 @@
       </div>
     </fieldset>
 
-    {# Always-visible: optional calling-from + dialed digits + submit. #}
+    {% comment %}
+    Always-visible row: optional calling-from + dialed digits + submit.
+    calling_from has two interchangeable widgets sharing one name; the
+    JS toggles which is shown based on the selected endpoint:
+      * select#calling-from-dn — populated from /phone-lines/ when a
+        phone is picked (so the operator chooses which line dials)
+      * the plain text input — fallback for trunks / no endpoint /
+        empty DN populate response. Both submit under the same name.
+    {% endcomment %}
     <div class="row mt-12">
       <div class="col-md-4">
         <label for="{{ form.calling_from.id_for_label }}" class="form-label">
           {{ form.calling_from.label }}
         </label>
+        <select name="calling_from" id="calling-from-dn"
+                class="form-select dpt-calling-from-dn"
+                data-lines-url="{% url 'plugins:nautobot_phones:dialplan_phone_lines' %}"
+                style="display:none" disabled>
+          <option value="">— pick a line —</option>
+        </select>
         {{ form.calling_from }}
         {% if form.calling_from.help_text %}
           <div class="form-text">{{ form.calling_from.help_text }}</div>

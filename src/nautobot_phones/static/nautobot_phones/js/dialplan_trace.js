@@ -104,6 +104,99 @@
       if (labelInput) {
         labelInput.value = e.params.data.text || "";
       }
+      maybePopulateCallingFromDN(e.params.data);
     });
+    // When the endpoint is cleared, reset calling_from back to free text.
+    $(endpointSelect).on("select2:clear", () => resetCallingFromToText());
+  }
+
+  // -----------------------------------------------------------------
+  // calling_from DN dropdown — populated when a phone endpoint is picked
+  // -----------------------------------------------------------------
+  //
+  // The template renders TWO widgets sharing name="calling_from":
+  //   * <select id="calling-from-dn">  — DN list (initially hidden+disabled)
+  //   * <input  name="calling_from">   — free-text fallback (always there)
+  // The browser only submits enabled fields, so toggling disabled+display
+  // is sufficient — no JS form-data manipulation needed.
+
+  const callingFromDN = form.querySelector('.dpt-calling-from-dn');
+  const callingFromInput = form.querySelector(
+    'input[name="calling_from"][type="text"], input[name="calling_from"]:not([type])'
+  );
+
+  function resetCallingFromToText() {
+    if (callingFromDN) {
+      callingFromDN.style.display = 'none';
+      callingFromDN.disabled = true;
+      callingFromDN.innerHTML = '<option value="">— pick a line —</option>';
+    }
+    if (callingFromInput) {
+      callingFromInput.style.display = '';
+      callingFromInput.disabled = false;
+    }
+  }
+
+  function maybePopulateCallingFromDN(endpointData) {
+    // Endpoint kinds that point at a phone: "phone" (direct phone hit)
+    // and "dn_via_phone" (DN search that resolved to a specific holder
+    // phone). Both have id="phone:<uuid>". Trunks + orphan DNs fall back
+    // to free text.
+    if (!callingFromDN) return;
+    if (!endpointData || !endpointData.id) {
+      resetCallingFromToText();
+      return;
+    }
+    const id = String(endpointData.id);
+    if (!id.startsWith('phone:')) {
+      resetCallingFromToText();
+      return;
+    }
+    const phoneId = id.slice('phone:'.length);
+    const url = callingFromDN.dataset.linesUrl;
+    fetch(`${url}?phone=${encodeURIComponent(phoneId)}`, {
+      credentials: 'same-origin',
+      headers: {'Accept': 'application/json'},
+    })
+      .then((r) => r.ok ? r.json() : {lines: []})
+      .then((data) => {
+        const lines = (data && data.lines) || [];
+        if (!lines.length) {
+          // No lines — keep the free-text input visible. Operator can
+          // still type something.
+          resetCallingFromToText();
+          return;
+        }
+        // Replace dropdown contents.
+        const opts = ['<option value="">— pick a line —</option>'];
+        lines.forEach((ln) => {
+          const partLabel = ln.partition ? ` (${ln.partition})` : '';
+          const labelTail = ln.label ? ` — ${ln.label}` : '';
+          opts.push(
+            `<option value="${esc(ln.extension)}">` +
+            `Line ${ln.button_index}: ${esc(ln.extension)}${esc(partLabel)}${esc(labelTail)}` +
+            `</option>`
+          );
+        });
+        callingFromDN.innerHTML = opts.join('');
+        callingFromDN.style.display = '';
+        callingFromDN.disabled = false;
+        // Hide the text input (still in the DOM but disabled so it
+        // doesn't submit; the dropdown wins).
+        if (callingFromInput) {
+          callingFromInput.style.display = 'none';
+          callingFromInput.disabled = true;
+          callingFromInput.value = '';
+        }
+      })
+      .catch(() => resetCallingFromToText());
+  }
+
+  // Minimal HTML-escape — Select2 itself ignores attributes, but we're
+  // injecting strings into option labels here.
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c])
+    );
   }
 })();

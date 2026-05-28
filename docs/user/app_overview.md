@@ -107,3 +107,15 @@ share the same identifiers.
 
 Two CustomFields tag each port as FXS/FXO (function) and RJ-11/RJ-21
 (connector). See [Sync Reference](sync_reference.md) for details.
+
+## Diagnosis tools
+
+Once synced, the app exposes operator-facing diagnostic surfaces that
+run purely against the local data — no further calls to CCM/FreePBX:
+
+- **[Dial-Plan Trace](dialplan_trace.md)** — walk what happens when
+  a phone dials a number, step by step. Lives under Apps → Phones →
+  Dial-plan trace, and is embedded as a panel at the bottom of every
+  Phone and Trunk detail page.
+- **[DID Heatmap](did_heatmap.md)** — visualize block utilization
+  across carriers and locations.

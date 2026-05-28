@@ -73,6 +73,56 @@ class _DialPlanFixtureMixin:
 # ---------------------------------------------------------------------------
 
 
+class DialPlanTraceFormAutoPrefillTests(TestCase):
+    """Single-PhoneSystem prefill convenience — operators with one
+    cluster don't have to click the dropdown to pick the only choice."""
+
+    def test_sole_phone_system_auto_selected(self):
+        ps = models.PhoneSystem.objects.create(
+            name="OnlyOne", vendor="cisco_ucm", version="15.0",
+            hostname="ccm.example.com",
+        )
+        f = DialPlanTraceForm()
+        self.assertEqual(f.initial.get("phone_system"), ps.pk)
+        self.assertEqual(f.fields["phone_system"].initial, ps.pk)
+
+    def test_multiple_phone_systems_no_prefill(self):
+        models.PhoneSystem.objects.create(
+            name="A", vendor="cisco_ucm", version="15.0",
+            hostname="a.example.com",
+        )
+        models.PhoneSystem.objects.create(
+            name="B", vendor="freepbx", version="17",
+            hostname="b.example.com",
+        )
+        f = DialPlanTraceForm()
+        # Two systems — can't guess which the operator wants.
+        self.assertIsNone(f.initial.get("phone_system"))
+
+    def test_zero_phone_systems_no_prefill(self):
+        """Fresh install with no phone systems shouldn't error or
+        prefill — just renders the empty dropdown."""
+        f = DialPlanTraceForm()
+        self.assertIsNone(f.initial.get("phone_system"))
+
+    def test_explicit_initial_wins_over_prefill(self):
+        """If the caller already supplied phone_system in initial, we
+        respect that and don't clobber. Important for the panel embeds
+        that prefill from a phone or trunk's existing FK."""
+        ps_a = models.PhoneSystem.objects.create(
+            name="A", vendor="cisco_ucm", version="15.0",
+            hostname="a.example.com",
+        )
+        ps_b = models.PhoneSystem.objects.create(
+            name="B", vendor="freepbx", version="17",
+            hostname="b.example.com",
+        )
+        # Only one PhoneSystem matches the single-system trigger, but
+        # since we explicitly passed B, prefill should keep B.
+        f = DialPlanTraceForm(initial={"phone_system": ps_b.pk})
+        self.assertEqual(f.initial.get("phone_system"), ps_b.pk)
+
+
 class DialPlanTraceFormDispatchTests(_DialPlanFixtureMixin, TestCase):
     """Form's ``clean()`` discriminates by ``mode``."""
 
@@ -228,6 +278,64 @@ class DialPlanEndpointSearchTests(_DialPlanFixtureMixin, TestCase):
         self.assertEqual(trunk_hits[0]["id"], f"trunk:{self.trunk.pk}")
         # Trunk's inbound_css is set in fixture, so it's derivable.
         self.assertEqual(trunk_hits[0]["starting_css_id"], str(self.css.pk))
+
+
+# ---------------------------------------------------------------------------
+# Phone-lines API — backs the calling_from DN dropdown
+# ---------------------------------------------------------------------------
+
+
+class DialPlanPhoneLinesTests(_DialPlanFixtureMixin, TestCase):
+    """JSON endpoint returning a phone's lines for the calling_from
+    DN dropdown."""
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("plugins:nautobot_phones:dialplan_phone_lines")
+
+    def test_phone_with_one_line(self):
+        resp = self.client.get(self.url, {"phone": str(self.phone.pk)})
+        self.assertEqual(resp.status_code, 200)
+        lines = resp.json()["lines"]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["extension"], "1001")
+        self.assertEqual(lines[0]["partition"], "Internal-PT")
+        self.assertEqual(lines[0]["button_index"], 1)
+
+    def test_phone_with_no_lines(self):
+        empty_phone = models.Phone.objects.create(
+            device_name="SEPNOLINES", mac_address="11:22:33:44:55:66",
+            device_kind="SEP", phone_system=self.ps,
+        )
+        resp = self.client.get(self.url, {"phone": str(empty_phone.pk)})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["lines"], [])
+
+    def test_missing_phone_param_returns_empty(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["lines"], [])
+
+    def test_bogus_phone_id_returns_empty(self):
+        """Stale form data with an invalid UUID shouldn't 500."""
+        resp = self.client.get(self.url, {"phone": "not-a-uuid"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["lines"], [])
+        # Real UUID shape but no matching phone — same response.
+        resp = self.client.get(self.url, {
+            "phone": "00000000-0000-0000-0000-000000000000",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["lines"], [])
+
+    def test_dedupes_shared_line(self):
+        """A phone holding the same DN on two buttons (rare shared-line
+        config) should appear once in the lines payload."""
+        models.Line.objects.create(
+            phone=self.phone, directory_number=self.dn, button_index=2,
+        )
+        resp = self.client.get(self.url, {"phone": str(self.phone.pk)})
+        self.assertEqual(len(resp.json()["lines"]), 1)
 
 
 # ---------------------------------------------------------------------------

@@ -90,6 +90,30 @@ class DialPlanTraceForm(forms.Form):
                   "result header so the trace is self-documenting.",
     )
 
+    def __init__(self, *args, **kwargs):
+        """Prefill convenience: if the cluster has exactly one PhoneSystem,
+        auto-select it so single-CCM operators don't have to click.
+
+        Two-system+ deployments still get the empty dropdown (we can't
+        guess which one the operator wants) — and the prefill is bypassed
+        whenever the form is bound (POST) or the caller already supplied
+        an initial value, so we don't clobber explicit choices.
+
+        Sets both the form-level ``initial`` dict AND the field's own
+        ``.initial`` because Nautobot's ``DynamicModelChoiceField`` uses
+        an AJAX-backed Select2 — its widget needs a concrete starting
+        value to render the option HTML *before* the AJAX query exists.
+        Without the field-level initial the Select2 displays its empty
+        placeholder despite ``self.initial`` carrying the PK.
+        """
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and not self.initial.get("phone_system"):
+            ps_list = list(models.PhoneSystem.objects.all()[:2])
+            if len(ps_list) == 1:
+                only_ps = ps_list[0]
+                self.initial["phone_system"] = only_ps.pk
+                self.fields["phone_system"].initial = only_ps.pk
+
     def clean(self):
         """Mode-conditional validation + endpoint resolution.
 
