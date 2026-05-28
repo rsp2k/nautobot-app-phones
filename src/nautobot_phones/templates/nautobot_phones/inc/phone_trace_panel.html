@@ -1,7 +1,9 @@
 {% load helpers %}
-{# Inline trace form on the Phone detail page. Submits to the
-   standalone dialplan_trace view via GET so the URL is shareable
-   ("here's the trace from Alice's phone dialing 911"). #}
+{% comment %}
+Inline trace form on the Phone detail page. Submits to the standalone
+dialplan_trace view via GET so the URL is shareable ("here's the trace
+from Alice's phone dialing 911").
+{% endcomment %}
 
 <div class="dpt-phone-panel">
   {% if phone_css_options %}

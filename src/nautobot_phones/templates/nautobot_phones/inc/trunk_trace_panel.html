@@ -1,9 +1,10 @@
 {% load helpers %}
-{# Inline trace form on the Trunk detail page. The trunk's
-   ``inbound_css`` is the natural starting CSS for inbound-call
-   traces ("what happens to a call arriving on this trunk dialing X").
-   Operators can override to trace from a different CSS in the same
-   phone_system. #}
+{% comment %}
+Trunk-detail inline trace panel. inbound_css is the natural starting
+CSS for inbound-call traces ("what happens to a call arriving on this
+trunk dialing X?"). Operators can override to trace from a different
+CSS in the same phone_system.
+{% endcomment %}
 
 <div class="dpt-phone-panel">
   {% if trunk_css_options %}
