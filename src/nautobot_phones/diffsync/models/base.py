@@ -17,11 +17,17 @@ us hand-writing prefetch logic.
 from datetime import datetime
 from typing import Optional
 
-from nautobot_ssot.contrib import NautobotModel
 from pydantic import field_validator
 
 from nautobot_phones import models
 from nautobot_phones.diffsync.models.gfk import GFKNautobotModel
+# Every DiffSync model in this app inherits from PolicyAwareNautobotModel
+# (aliased to NautobotModel) so PhoneSystem.delete_policy can govern the
+# delete pass per-model. Empty/missing policy is identical to vanilla
+# NautobotModel behavior (back-compat preserved).
+from nautobot_phones.diffsync.models.policy import (
+    PolicyAwareNautobotModel as NautobotModel,
+)
 
 
 class PhoneSystemModel(NautobotModel):

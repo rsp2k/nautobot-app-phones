@@ -52,7 +52,13 @@ from typing import Any, Callable, ClassVar, Optional
 
 from diffsync.exceptions import ObjectCrudException
 from django.contrib.contenttypes.models import ContentType
-from nautobot_ssot.contrib import NautobotModel
+
+# Inherit from PolicyAwareNautobotModel so GFK through-tables also get
+# delete_policy dispatch. Empty/missing policy preserves the vanilla
+# NautobotModel behavior so this is back-compat.
+from nautobot_phones.diffsync.models.policy import (
+    PolicyAwareNautobotModel as NautobotModel,
+)
 
 # Type alias for the per-kind lookup signature: receives the
 # ``target_name`` identifier value plus the rest of the DiffSync

@@ -140,7 +140,7 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
     # orphan-deleted by a plain sync.
     _BUTTON_MODELS = ("line", "speed_dial", "busy_lamp_field", "phone_service_url")
 
-    def __init__(self, *args, include_lines=True, **kwargs):
+    def __init__(self, *args, include_lines=True, delete_policy=None, **kwargs):
         """`include_lines=False` excludes per-phone button models from diff.
 
         Pair with the source adapter's `enrich_phone_lines=False` to leave
@@ -148,10 +148,19 @@ class PhonesNautobotAdapter(ContribNautobotAdapter):
         alone when the sync isn't doing the slow per-phone getPhone
         enrichment. Both adapters need to agree, otherwise DiffSync sees
         an empty source vs populated dest and tries to delete the orphans.
+
+        ``delete_policy`` (default ``{}``) is the per-model action map
+        sourced from ``PhoneSystem.delete_policy``. Each
+        ``PolicyAwareNautobotModel`` subclass consults this dict during
+        its ``delete()`` to decide between delete / ignore / flag.
+        Empty dict → vanilla delete behavior on every model.
         """
         super().__init__(*args, **kwargs)
         if not include_lines:
             self.top_level = tuple(t for t in self.top_level if t not in self._BUTTON_MODELS)
+        # Per-model delete-policy dispatch (Phase 6).
+        # Read by ``PolicyAwareNautobotModel.delete()`` on each model.
+        self.delete_policy = delete_policy or {}
 
     def _handle_single_parameter(self, parameters, parameter_name, database_object, diffsync_model):
         """Special-case virtual GFK identifier fields before the framework

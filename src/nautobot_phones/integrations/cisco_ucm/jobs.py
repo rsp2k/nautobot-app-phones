@@ -137,10 +137,17 @@ class CUCMDataSource(DataSource):
         # Pair with source adapter's enrich_phone_lines flag — both must
         # agree on whether Line participates in the diff, otherwise dest
         # records get orphan-deleted when source isn't enriching.
+        ps = PhoneSystem.objects.get(pk=self.phone_system.pk)
         self.target_adapter = PhonesNautobotAdapter(
             job=self,
             sync=self.sync,
             include_lines=self.enrich_phone_lines,
+            # Per-model delete-policy (Phase 6). Sourced from the
+            # PhoneSystem's delete_policy JSONField. Operators set
+            # ``{"phone": "flag", "callpickupgroup": "ignore", ...}``
+            # in the UI to control what happens when vendor records
+            # disappear. Empty/missing = vanilla delete (back-compat).
+            delete_policy=ps.delete_policy or {},
         )
         self.target_adapter.load()
 

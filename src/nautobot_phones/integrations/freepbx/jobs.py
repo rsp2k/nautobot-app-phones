@@ -27,6 +27,7 @@ from nautobot_phones.diffsync.adapters.nautobot import PhonesNautobotAdapter
 from nautobot_phones.integrations.freepbx.adapter import FreePBXSourceAdapter
 from nautobot_phones.integrations.freepbx.client import FreePBXClient
 from nautobot_phones.models import PhoneSystem
+from nautobot_phones.models import PhoneSystem
 
 
 class FreePBXDataSource(DataSource):
@@ -138,10 +139,18 @@ class FreePBXDataSource(DataSource):
         # so we exclude those button models from the diff to avoid
         # orphan-deleting any populated by other phone systems on the
         # same Nautobot instance.
+        ps = PhoneSystem.objects.get(pk=self.phone_system.pk)
         self.target_adapter = PhonesNautobotAdapter(
             job=self,
             sync=self.sync,
             include_lines=False,
+            # Per-model delete-policy (Phase 6) — see CCM job for details.
+            # Especially useful on the FreePBX side where the adapter has
+            # partial coverage (no pickup groups, simpler hunt subsystem) —
+            # operators may want ``{"callpickupgroup": "ignore"}`` so
+            # CCM-populated pickup groups don't get deleted by a FreePBX
+            # sync that has nothing to say about them.
+            delete_policy=ps.delete_policy or {},
         )
         self.target_adapter.load()
 
